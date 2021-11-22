@@ -1,11 +1,12 @@
 import React, {useEffect, useState} from "react";
 import {StyleSheet, TouchableWithoutFeedback, View, Animated, Text} from "react-native";
 import {Easing} from "../Animations";
-import {AppStore, useAppSelector} from "../AppState";
+import {AppStore, useAppSelector} from "../../AppState";
 import {createSlice, PayloadAction} from "@reduxjs/toolkit";
 import {useAnimation} from "../hooks/UseAnimation";
 import {HoverAnimatedView} from "./Hoverable";
 import Icon from "react-native-vector-icons/FontAwesome";
+import {useHistory} from "react-router-native";
 
 type SidebarState = {
     visible: boolean
@@ -19,17 +20,16 @@ export const sidebarSlice = createSlice({
     name: "sidebar",
     initialState: InitialSidebarState,
     reducers: {
-        toggle: (state, action: PayloadAction<boolean>) => {
-            state.visible = action.payload;
+        toggle: (state, action: PayloadAction<boolean | undefined>) => {
+            state.visible = typeof action.payload === "boolean" ? action.payload : !state.visible;
         }
     }
 });
 
 export const sidebarReducer = sidebarSlice.reducer;
-export const toggleSideBar = (visible: boolean) => AppStore.dispatch(sidebarSlice.actions.toggle(visible));
+export const toggleSideBar = (visible?: boolean) => AppStore.dispatch(sidebarSlice.actions.toggle(visible));
 
 export const SideBar = (props: {
-    renderer: () => React.ReactElement,
     children?: React.ReactNode | React.ReactNode[],
     width?: number,
     animationDuration?: number
@@ -68,36 +68,51 @@ export const SideBar = (props: {
             <Animated.View
                 style={[style.body, { left: showAnimation }]}
             >
-                <TouchableWithoutFeedback
-                    onPress={() => toggleSideBar(!visible)}
-                >
-                    {props.children}
-                </TouchableWithoutFeedback>
+                {props.children}
+
             </Animated.View>
         </View>
     )
 }
 
 const SideBarRenderer = React.memo(() => {
+    const activeBlogs = useAppSelector(state => state.blogRegistry.activeBlogs);
+    const navigate = useHistory();
 
     return (
         <React.Fragment>
-            <SideBarEntry icon={"rocket"}>
-                Home
+            <SideBarEntry icon={"rocket"} onPress={() => navigate.push("/test")}>
+                Go to Test
             </SideBarEntry>
-            <SideBarEntry icon={"bomb"}>
-                Test 1
+            <SideBarEntry icon={"image"}>
+                Blogs
             </SideBarEntry>
-            <SideBarEntry icon={"rocket"}>
-                Test 2
+            <React.Fragment>
+                {activeBlogs.map(blog => (
+                    <SideBarEntry icon={"image"} key={"blog-" + blog} onPress={() => navigate.push("/feed/" + blog + "/")}>
+                        {blog}
+                    </SideBarEntry>
+                ))}
+            </React.Fragment>
+            <View style={{ flex: 1 }} />
+            <SideBarEntry icon={"cogs"} onPress={() => navigate.push("/settings")}>
+                Settings
             </SideBarEntry>
         </React.Fragment>
     );
 });
 
-const SideBarEntry = (props: { children?: React.ReactNode, icon: string }) => {
+const SideBarEntry = (props: { children?: React.ReactNode, icon: string, onPress?: () => void }) => {
     return (
-        <TouchableWithoutFeedback onPress={() => console.error("PRESS!")}>
+        <TouchableWithoutFeedback
+            onPress={() => {
+                toggleSideBar(false);
+
+                if(props.onPress) {
+                    props.onPress();
+                }
+            }}
+        >
             <HoverAnimatedView
                 duration={200}
                 style={style.menuEntry}
@@ -108,7 +123,7 @@ const SideBarEntry = (props: { children?: React.ReactNode, icon: string }) => {
                 })}
             >
                 <Icon style={style.menuEntryIcon} name={props.icon} size={20} />
-                <Text style={style.menuEntryText}>Home</Text>
+                <Text style={style.menuEntryText}>{props.children}</Text>
             </HoverAnimatedView>
         </TouchableWithoutFeedback>
     );
@@ -138,8 +153,8 @@ const style = StyleSheet.create({
         marginTop: 2,
         marginBottom: 2,
         padding: 5,
-        paddingLeft: 10,
-        paddingRight: 10,
+        paddingLeft: 15,
+        paddingRight: 15,
         flexDirection: "row",
         borderRadius: 5,
 

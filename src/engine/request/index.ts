@@ -1,11 +1,11 @@
-import {executeLocalProxyRequest} from "./LocalProxyClient";
-import {parsePayloadHtml} from "./ParserHTML";
+import { executeLocalProxyRequest } from "./LocalProxyClient";
+import { parsePayloadHtml } from "./ParserHTML";
 
 export type ImplHttpRequestParameters = {
     headers: { [key: string]: string },
     method: "GET" | "POST",
     url: string,
-    body: undefined | string | ArrayBuffer
+    body: undefined | ArrayBuffer
 };
 
 export type ImplHttpResponse = {
@@ -15,7 +15,7 @@ export type ImplHttpResponse = {
     statusCode: number,
     statusText: string,
 
-    payload: string
+    payload: ArrayBuffer
 } | {
     status: "failure-internal",
     message: string
@@ -23,7 +23,7 @@ export type ImplHttpResponse = {
 
 type HttpBaseRequest = {
     url: string,
-    urlParameters?: { [key: string]: string },
+    urlParameters?: { [key: string]: string | number },
 
     headers?: { [key: string]: string },
 };
@@ -47,7 +47,7 @@ export type HttpRequest = HttpGetRequest | HttpPostRequest;
 interface HttpResponseType {
     "json": object,
     "html": Document,
-    "binary": Uint8Array,
+    "binary": ArrayBuffer,
     "text": string
 }
 
@@ -74,7 +74,7 @@ type HttpResponseFailure = HttpResponseBase & {
 export type HttpResponse<R> = HttpResponseSuccess<R> | HttpResponseFailure;
 
 export async function executeRequest<R extends keyof HttpResponseType>(
-    request: HttpRequest & { responseType: keyof HttpResponseType }
+    request: HttpRequest & { responseType: R }
 ) : Promise<HttpResponse<HttpResponseType[R]>> {
     const implRequest: ImplHttpRequestParameters = {
         body: undefined,
@@ -112,6 +112,10 @@ export async function executeRequest<R extends keyof HttpResponseType>(
         }
     }
 
+    if(implRequest.headers["User-Agent"]) {
+        implRequest.headers["User-Agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1";
+    }
+
     const implResponse = await executeLocalProxyRequest(implRequest);
     switch (implResponse.status) {
         case "failure-internal":
@@ -129,7 +133,7 @@ export async function executeRequest<R extends keyof HttpResponseType>(
                 statusCode: implResponse.statusCode,
                 statusText: implResponse.statusText,
                 headers: implResponse.headers,
-                payload: implResponse.payload
+                payload: await arrayBuffer2String(implResponse.payload)
             };
 
         case "success":
@@ -137,20 +141,19 @@ export async function executeRequest<R extends keyof HttpResponseType>(
             try {
                 switch (request.responseType) {
                     case "text":
-                        response = implResponse.payload;
+                        response = await arrayBuffer2String(implResponse.payload);
                         break;
 
                     case "binary":
-                        /* FIXME! */
                         response = implResponse.payload;
                         break;
 
                     case "html":
-                        response = parsePayloadHtml(implResponse.payload);
+                        response = parsePayloadHtml(await arrayBuffer2String(implResponse.payload));
                         break;
 
                     case "json":
-                        response = JSON.parse(implResponse.payload);
+                        response = JSON.parse(await arrayBuffer2String(implResponse.payload));
                         break;
 
                     default:
@@ -184,4 +187,14 @@ export async function executeRequest<R extends keyof HttpResponseType>(
                 payload: response
             };
     }
+}
+
+function string2ArrayBuffer(value: string) : Promise<ArrayBuffer> {
+    const blob = new Blob([ value ], { type: 'text/plain; charset=utf-8' });
+    return blob.arrayBuffer();
+}
+
+function arrayBuffer2String(buffer: ArrayBuffer) : Promise<string> {
+    const blob = new Blob([ buffer ], { type: 'text/plain; charset=utf-8' });
+    return blob.text();
 }

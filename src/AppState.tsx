@@ -1,12 +1,14 @@
 import {configureStore} from "@reduxjs/toolkit";
 import {useDispatch as originalUseDispatch, useSelector as originalUseSelector} from "react-redux";
-import {sidebarReducer} from "./components/SideBar";
-
-
+import {blogRegistryReducer} from "./engine/Blogs";
+import {sidebarReducer} from "./ui/components/SideBar";
+import {loaderReducer} from "./AppLoader";
 
 export const AppStore = configureStore({
     reducer: {
-        sidebar: sidebarReducer
+        sidebar: sidebarReducer,
+        blogRegistry: blogRegistryReducer,
+        loader: loaderReducer,
     }
 });
 

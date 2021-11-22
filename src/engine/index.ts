@@ -1,4 +1,4 @@
-import {executeRequest} from "./request";
+import "./blog-provider/Konachan.ts";
 
 /*
 setTimeout(() => {
@@ -19,14 +19,36 @@ setTimeout(() => {
 }, 1000);
 */
 
-type FeedEntryImage = {
-    type: "image",
-    url: string,
-
-    /* TODO: Preview modes */
+export type PostImageLoaded = {
+    status: "loaded",
+    uri: string,
 };
 
-type FeedEntryError = {
+export type PostImageLoadError = {
+    status: "error",
+    message: string,
+};
+
+export type PostImageInfo = {
+    url: string,
+    width: number | null,
+    height: number | null,
+    loadImage: () => Promise<PostImageLoaded | PostImageLoadError>
+};
+
+export type PostImage = {
+    preview: PostImageInfo | null,
+    detailed: PostImageInfo,
+    other: PostImageInfo[]
+};
+
+export type FeedPostImage = {
+    type: "image",
+    images: PostImage[],
+    metadata: { [key: string]: string }
+};
+
+type FeedPostError = {
     type: "error",
 } & ({
     errorType: "load-error",
@@ -35,7 +57,7 @@ type FeedEntryError = {
     errorType: "not-found",
 });
 
-export type FeedEntry = FeedEntryImage | FeedEntryError;
+export type FeedPost = FeedPostImage | FeedPostError;
 
 export type FeedFilter = {
     text?: string,
@@ -47,13 +69,13 @@ export interface FeedProvider {
     /* Random access methods */
     randomAccessSupported(target: "page" | "entry"): boolean;
 
-    loadPage(target: number): Promise<FeedEntry[]>;
-    getPageCount() : Promise<number | null>;
+    loadPage(target: number): Promise<FeedPost[]>;
+    getPageCount() : Promise<number>;
 
-    loadEntry(target: number): Promise<FeedEntry>;
-    getEntryCount() : Promise<number | null>;
+    loadEntry(target: number): Promise<FeedPost>;
+    getEntryCount() : Promise<number>;
 
-    loadEntryRef(target: any): Promise<FeedEntry>;
+    loadEntryRef(target: any): Promise<FeedPost>;
 }
 
 export interface BlogProvider {

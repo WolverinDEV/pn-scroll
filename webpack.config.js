@@ -1,26 +1,36 @@
 const path = require('path');
 const webpack = require('webpack');
 const HTMLWebpackPlugin = require('html-webpack-plugin');
+const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 
-const appDirectory = path.resolve(__dirname, '../');
+const isDevelopment = process.env.NODE_ENV !== 'production';
+console.log("Generating webpack config for %s", process.env.NODE_ENV || 'development');
 
 module.exports = {
-    entry: path.resolve(__dirname, "src", "index.tsx"),
+    entry: {
+        app: path.resolve(__dirname, "src", "index.tsx")
+    },
     output: {
-        filename: 'bundle.web.js',
-        path: path.resolve(appDirectory, 'dist')
+        filename: '[name]_[fullhash].web.js',
+        path: path.resolve(__dirname, 'dist')
     },
     plugins: [
-        new HTMLWebpackPlugin(),
+        new CleanWebpackPlugin(),
+        new HTMLWebpackPlugin({
+            title: "Your pn-feed"
+        }),
         // `process.env.NODE_ENV === 'production'` must be `true` for production
         // builds to eliminate development checks and reduce build size. You may
         // wish to include additional optimizations.
         new webpack.DefinePlugin({
             'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
-            __DEV__: process.env.NODE_ENV !== 'production' || true,
+            __DEV__: isDevelopment,
+        }),
+        new webpack.ProvidePlugin({
+            Buffer: ['buffer', 'Buffer'],
         }),
     ],
-    mode: "development",
+    mode: isDevelopment ? "development" : "production",
     devtool: "source-map",
     module: {
         rules: [
@@ -28,8 +38,8 @@ module.exports = {
                 test: /\.js$/,
                 use: "babel-loader",
                 include: [
-                    path.join(__dirname, "src"),
-                    path.join(__dirname, "node_modules/react-native-vector-icons")
+                    path.join(__dirname, "node_modules/react-native-vector-icons"),
+                    path.join(__dirname, "node_modules/react-router-native"),
                 ]
             },
             {
@@ -77,7 +87,12 @@ module.exports = {
     },
 
     devServer: {
-        //  --inline --hot --colors
+        historyApiFallback: true,
     },
 
+    optimization: {
+        splitChunks: {
+            chunks: 'all',
+        },
+    },
 }

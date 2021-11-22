@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {Animated, ViewProps} from "react-native";
+import {Animated, StyleProp, ViewProps, ViewStyle} from "react-native";
 
 export const Hoverable = (props: {
     children?: React.ReactChild | ((hovered: boolean) => React.ReactChild),
@@ -39,7 +39,7 @@ export const Hoverable = (props: {
 }
 
 type AnimatedOutputRange<T extends any[]> = { [K in keyof T]: string } | { [K in keyof T]: number };
-class SimpleAnimatedValue extends Animated.Value {
+export class SimpleAnimatedValue extends Animated.Value {
     interpolate(config: Animated.InterpolationConfigType): Animated.AnimatedInterpolation;
     interpolate<T extends [number, ...number[]]>(inputRange: T, outputRange: AnimatedOutputRange<T>): Animated.AnimatedInterpolation;
     interpolate(configOrInputRange: any, outputRange?: any): Animated.AnimatedInterpolation {
@@ -65,7 +65,7 @@ export class HoverAnimatedView extends React.PureComponent<{
     onHoverIn?: () => void,
     onHoverOut?: () => void,
 
-    hoverStyle?: (animation: SimpleAnimatedValue) => any,
+    hoverStyle?: (animation: SimpleAnimatedValue) => Animated.AnimatedProps<StyleProp<ViewStyle>> | Animated.AnimatedProps<StyleProp<ViewStyle>>[],
     toValue?: number,
     duration: number
 } & ViewProps> {
@@ -78,12 +78,17 @@ export class HoverAnimatedView extends React.PureComponent<{
     }
 
     render() {
-        let style = this.props.style;
+        let style = this.props.style as any;
         if(!Array.isArray(style)) {
             style = [ style ];
         }
         if(typeof this.props.hoverStyle === "function") {
-            style.push(this.props.hoverStyle(this.animation));
+            const result = this.props.hoverStyle(this.animation);
+            if(Array.isArray(result)) {
+                style.push(...result);
+            } else {
+                style.push(result);
+            }
         }
 
         return (

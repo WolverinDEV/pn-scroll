@@ -4,7 +4,11 @@ import iconFont from 'react-native-vector-icons/Fonts/FontAwesome.ttf';
 const iconFontStyles = `@font-face {
   src: url(${iconFont});
   font-family: FontAwesome;
-}`;
+}
+* {
+  user-select: none;
+}
+`;
 
 const style = document.createElement('style');
 style.type = 'text/css';
