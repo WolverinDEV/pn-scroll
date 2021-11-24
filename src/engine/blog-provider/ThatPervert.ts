@@ -2,16 +2,23 @@ import {
     BlogProvider,
     FeedFilter,
     FeedPost,
-    FeedProvider,
+    FeedProvider, ImageLoadResult,
     PostImage,
-    PostImageLoaded,
-    PostImageLoadError
 } from "../index";
-import {CachedPageLoader} from "./Helper";
+import {ensurePageLoaderSuccess} from "./Helper";
 import {executeRequest} from "../request";
-import {ImageCache} from "../cache/Image";
-
-/* post_list */
+import {HTMLElement} from "node-html-parser";
+import {
+    CacheKey,
+    createItemCache, ItemCache,
+    ItemCacheResolver,
+    ResolveOptions,
+    ResolveResult,
+    ResolverRole
+} from "../cache/Cache";
+import {extractErrorMessage} from "../../utils";
+import {MemoryCacheResolver} from "../cache/CacheResolver";
+import {downloadImage} from "../request/Image";
 
 type ThatPervertPage = {
     navigator: {
@@ -23,66 +30,60 @@ type ThatPervertPage = {
     posts: FeedPost[],
 };
 
-class ThatPervertImageCache extends ImageCache {
-    constructor() {
-        super();
-    }
-
-    protected async doLoadImage(imageUrl: string): Promise<PostImageLoaded | PostImageLoadError> {
-        const result = await executeRequest({
-            type: "GET",
-            responseType: "binary",
-            url: imageUrl,
-            headers: {
-                Referer: "http://thatpervert.com/"
-            }
-        });
-
-        if(result.status !== "success") {
-            return { status: "error", message: `${result.statusCode}: ${result.payload}` };
-        }
-
-        if(result.headers["content-type"].indexOf("image") !== -1) {
-            const data = new Blob([ result.payload ], { type: result.headers["content-type"] });
-            const url = URL.createObjectURL(data);
-
-            return {
-                status: "loaded",
-                uri: url
-            };
-        }
-
-        console.error("HTML Result: %o", result);
-        return { status: "error", message: "html result" };
-    }
+export function downloadThatPervertImage(url: string): Promise<ImageLoadResult> {
+    return downloadImage(url, {
+        Referer: "http://thatpervert.com"
+    });
 }
 
-const imageCache = new ThatPervertImageCache();
-class ThatPervertPageLoader extends CachedPageLoader<ThatPervertPage> {
+class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage> {
     private readonly urlBase: string;
 
     constructor() {
-        super();
-
         this.urlBase = "http://thatpervert.com/tag/Masturbation+Hentai";
     }
 
-    protected async doLoadPage(target: number): Promise<ThatPervertPage> {
+    cached(key: CacheKey<number>): boolean { return false; }
+    delete(key: CacheKey<number>): void { }
+    save(key: CacheKey<number>, value: ThatPervertPage): void { }
+
+    name(): string {
+        return "ThatPervert loader";
+    }
+
+    role(): ResolverRole {
+        return "resolver";
+    }
+
+    async resolve(key: CacheKey<number>, options: ResolveOptions<ThatPervertPage>): Promise<ResolveResult<ThatPervertPage>> {
         const response = await executeRequest({
             type: "GET",
-            url: target === -1 ? this.urlBase : this.urlBase + "/" + target,
+            url: key.key === -1 ? this.urlBase : this.urlBase + "/" + key.key,
             urlParameters: {  },
             responseType: "html"
         });
 
         if(response.status !== "success") {
-            throw response.statusText + " (" + response.payload + ")";
+            return {
+                status: "cache-error",
+                message: response.statusText + " (" + response.payload + ")"
+            };
         }
 
-        return this.parsePage(target, response.payload);
+        try {
+            return {
+                status: "cache-hit",
+                value: this.parsePage(key.key, response.payload),
+            };
+        } catch (error) {
+            return {
+                status: "cache-error",
+                message: extractErrorMessage(error)
+            }
+        }
     }
 
-    private parsePage(pageId: number, element: Document) : ThatPervertPage {
+    private parsePage(pageId: number, container: HTMLElement) : ThatPervertPage {
         let result: ThatPervertPage = {
             navigator: {
                 current: pageId,
@@ -91,8 +92,6 @@ class ThatPervertPageLoader extends CachedPageLoader<ThatPervertPage> {
             },
             posts: []
         };
-
-        let container = element.body;
 
         /* extract the page count */
         {
@@ -152,16 +151,22 @@ class ThatPervertPageLoader extends CachedPageLoader<ThatPervertPage> {
 
                         postImages.push({
                             detailed: {
+                                identifier: detailedUrl,
+                                metadata: {},
+
                                 width: null,
                                 height: null,
-                                url: detailedUrl,
-                                loadImage: () => imageCache.loadImage(detailedUrl)
+
+                                loadImage: () => downloadThatPervertImage(detailedUrl)
                             },
                             preview: {
+                                identifier: previewUrl,
+                                metadata: {},
+
                                 width: parseInt(previewNode.getAttribute("width")!),
                                 height: parseInt(previewNode.getAttribute("height")!),
-                                url: previewUrl,
-                                loadImage: () => imageCache.loadImage(previewUrl)
+
+                                loadImage: () => downloadThatPervertImage(previewUrl)
                             },
                             other: []
                         });
@@ -170,10 +175,13 @@ class ThatPervertPageLoader extends CachedPageLoader<ThatPervertPage> {
                         const previewUrl = previewNode.getAttribute("src")!;
                         postImages.push({
                             detailed: {
+                                identifier: previewUrl,
+                                metadata: {},
+
                                 width: parseInt(previewNode.getAttribute("width")!),
                                 height: parseInt(previewNode.getAttribute("height")!),
-                                url: previewUrl,
-                                loadImage: () => imageCache.loadImage(previewUrl)
+
+                                loadImage: () => downloadThatPervertImage(previewUrl)
                             },
                             preview: null,
                             other: []
@@ -197,10 +205,16 @@ class ThatPervertPageLoader extends CachedPageLoader<ThatPervertPage> {
 
 class ThatPervertFeedProvider implements FeedProvider {
     private static kPostsPerSite = 10;
-    private pageLoader: ThatPervertPageLoader;
+    private pageLoader: ItemCache<number, ThatPervertPage>;
 
     constructor(readonly filter: FeedFilter) {
-        this.pageLoader = new ThatPervertPageLoader();
+        this.pageLoader =  createItemCache<number, ThatPervertPage>(
+            page => page.toString(),
+            [
+                new MemoryCacheResolver(),
+                new ThatPervertPageLoader()
+            ]
+        );
     }
 
     randomAccessSupported(target: "page" | "entry"): boolean {
@@ -228,12 +242,9 @@ class ThatPervertFeedProvider implements FeedProvider {
     }
 
     async getPageCount(): Promise<number> {
-        const firstPage = await this.pageLoader.loadPage(-1);
-        if(firstPage.status !== "success") {
-            throw "failed to load first page (" + firstPage.message + ")";
-        }
+        const firstPage = await ensurePageLoaderSuccess(this.pageLoader, -1);
 
-        const { prev, next } = firstPage.page.navigator;
+        const { prev, next } = firstPage.navigator;
         if(prev === null && next === null) {
             /* we only got one page */
             return 1;
@@ -253,15 +264,11 @@ class ThatPervertFeedProvider implements FeedProvider {
     }
 
     async loadPage(target: number): Promise<FeedPost[]> {
-        console.error("Load page: %o/%o", target, await this.getPageCount());
+        //  console.error("Load page: %o/%o", target, await this.getPageCount());
 
         /* FIXME: Thatpervert is alignt to the front. This means that page 1 contains some items from page 2 */
-        const page = await this.pageLoader.loadPage(await this.getPageCount() - target + 1);
-        if(page.status === "success") {
-            return page.page.posts;
-        } else {
-            throw "failed to load page (" + page.message + ")";
-        }
+        const page = await ensurePageLoaderSuccess(this.pageLoader, await this.getPageCount() - target + 1);
+        return page.posts;
     }
 }
 

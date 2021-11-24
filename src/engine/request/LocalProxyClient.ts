@@ -14,6 +14,7 @@ type PendingRequest = {
 
 let requestIdIndex = 1;
 const pendingRequests: PendingRequest[] = [];
+const connectedOneshotCallbacks: (() => void)[] = [];
 
 function generateRequestId() : number {
     if(requestIdIndex === 0) {
@@ -168,6 +169,9 @@ function handleSocketConnected(eventSocket: WebSocket) {
     }
 
     console.debug("Local request proxy has connected.");
+    for(const callback of connectedOneshotCallbacks.splice(0, connectedOneshotCallbacks.length)) {
+        callback();
+    }
 }
 
 function handleSocketError(eventSocket: WebSocket, error: any) {
@@ -231,7 +235,7 @@ function handleSocketDisconnected(eventSocket: WebSocket, event: any) {
     /* TODO: Reconnect */
 }
 
-export function setupLocalProxyClient() {
+export async function setupLocalProxyClient() {
     if(Platform.OS !== "web") {
         /* We don't initialize it */
         return;
@@ -245,4 +249,9 @@ export function setupLocalProxyClient() {
         targetUrl = address;
         executeConnect();
     });
+
+    await Promise.race([
+        new Promise<void>(resolve => connectedOneshotCallbacks.push(resolve)),
+        new Promise<void>(resolve => { setTimeout(resolve, 5000); })
+    ]);
 }

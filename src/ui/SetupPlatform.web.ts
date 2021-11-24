@@ -1,4 +1,5 @@
 import iconFont from 'react-native-vector-icons/Fonts/FontAwesome.ttf';
+import {setupLocalProxyClient} from "../engine/request/LocalProxyClient";
 function setupCustomCss() {
     const cssLines = [];
     cssLines.push(
@@ -29,10 +30,11 @@ function setupCustomCss() {
     document.head.appendChild(style);
 }
 
-export async function setupPlatformUiFunctions() {
-    console.info("Web UI setup!");
+export async function setupPlatformFunctions() {
+    console.info("Web setup!");
 
     setupCustomCss();
+    await setupLocalProxyClient();
 }
 
 export { BrowserRouter as PlatformRouter } from "react-router-dom";

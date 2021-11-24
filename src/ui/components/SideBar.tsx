@@ -1,5 +1,13 @@
 import React, {useEffect, useState} from "react";
-import {StyleSheet, TouchableWithoutFeedback, View, Animated, Text} from "react-native";
+import {
+    StyleSheet,
+    TouchableWithoutFeedback,
+    View,
+    Animated,
+    Text,
+    TouchableNativeFeedback,
+    Platform, TouchableHighlight
+} from "react-native";
 import {Easing} from "../Animations";
 import {AppStore, useAppSelector} from "../../AppState";
 import {createSlice, PayloadAction} from "@reduxjs/toolkit";
@@ -103,8 +111,14 @@ const SideBarRenderer = React.memo(() => {
 });
 
 const SideBarEntry = (props: { children?: React.ReactNode, icon: string, onPress?: () => void }) => {
+    const TouchableWithFeedback = Platform.select({
+        web: TouchableWithoutFeedback as any,
+        android: TouchableNativeFeedback,
+        default: TouchableHighlight
+    });
+
     return (
-        <TouchableWithoutFeedback
+        <TouchableWithFeedback
             onPress={() => {
                 toggleSideBar(false);
 
@@ -125,7 +139,7 @@ const SideBarEntry = (props: { children?: React.ReactNode, icon: string, onPress
                 <Icon style={style.menuEntryIcon} name={props.icon} size={20} />
                 <Text style={style.menuEntryText}>{props.children}</Text>
             </HoverAnimatedView>
-        </TouchableWithoutFeedback>
+        </TouchableWithFeedback>
     );
 }
 
@@ -180,6 +194,6 @@ const style = StyleSheet.create({
         shadowColor: "#000",
         shadowOffset: { width: -1, height: 0 },
         shadowOpacity: .5,
-        shadowRadius: 5
+        shadowRadius: 5,
     }
 });

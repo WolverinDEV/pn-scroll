@@ -1,22 +1,13 @@
-import {AppRegistry, Platform, StyleProp, ViewStyle} from 'react-native';
-
-import React, {useEffect, useMemo} from 'react';
+import {AppRegistry, Platform, StyleProp, View, ViewStyle} from 'react-native';
+import React from 'react';
 import type { ReactElement as Node } from 'react';
-import {
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    useColorScheme,
-    View,
-} from 'react-native';
 import {Provider} from "react-redux";
 import {AppStore} from "./AppState";
-import "./IconSetup";
-import "./engine";
 import {AppView} from "./ui";
-import "./declarations";
 import {AppRouter} from "./ui/Router";
-import {executeLoading} from "./AppLoader";
+import "./declarations";
+import {ImageDetailedViewHook} from "./ui/components/ImageDetailedView";
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 namespace Colors {
     export const primary = '#1292B4';
@@ -31,15 +22,19 @@ namespace Colors {
 const App: () => Node = () => {
     const backgroundStyle: StyleProp<ViewStyle> = {
         backgroundColor: Colors.darker,
-        height: Platform.OS === "web" ? "100vh" : "100%"
+        height: Platform.OS === "web" ? "100vh" : "100%",
+        position: "relative"
     };
 
     return (
         <Provider store={AppStore}>
             <AppRouter>
-                <SafeAreaView style={backgroundStyle}>
-                    <AppView />
-                </SafeAreaView>
+                <SafeAreaProvider>
+                    <View style={backgroundStyle}>
+                        <AppView />
+                    </View>
+                </SafeAreaProvider>
+                <ImageDetailedViewHook />
             </AppRouter>
         </Provider>
     );
@@ -47,7 +42,7 @@ const App: () => Node = () => {
 
 AppRegistry.registerComponent("pn-scroll", () => App);
 
-{
+if(Platform.OS === "web") {
     const rootTag = document.createElement("div");
     document.body.append(rootTag);
 
@@ -56,4 +51,3 @@ AppRegistry.registerComponent("pn-scroll", () => App);
         rootTag: rootTag,
     });
 }
-

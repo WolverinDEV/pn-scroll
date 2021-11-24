@@ -1,7 +1,7 @@
 import {useAppSelector} from "../AppState";
 import React, {useEffect, useMemo} from "react";
 import {ActiveBlogs} from "../engine/Blogs";
-import {View} from "react-native";
+import {View, Text} from "react-native";
 import {SideBar} from "./components/SideBar";
 import {TopBar} from "./components/TopBar";
 import {FeedView} from "./components/FeedView";
@@ -10,6 +10,8 @@ import {UnknownPage} from "./pages/Unknown";
 import {PageSettings} from "./pages/Settings";
 import {executeLoading} from "../AppLoader";
 import {useRouteMatch} from "react-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {MainPage} from "./pages/Main";
 
 const BlogView = () => {
     const parameter = useRouteMatch();
@@ -18,6 +20,7 @@ const BlogView = () => {
 
     return (
         <View style={{
+            position: "relative",
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
@@ -44,19 +47,24 @@ export const AppView = () => {
     switch(loaderState) {
         case "load":
             return (
-                <SideBar>
-                    <TopBar />
-                    <Switch>
-                        <Route path={"/feed/:id/"} render={() => <BlogView />} />
-                        <Route path={"/settings"} render={() => <PageSettings />} />
-                        <Route path={"*"} render={() => <UnknownPage />} />
-                    </Switch>
-                </SideBar>
+                <SafeAreaView style={{ height: "100%", width: "100%" }}>
+                    <SideBar>
+                        <TopBar />
+                        <Switch>
+                            <Route path={"/feed/:id/"} render={() => <BlogView />} />
+                            <Route path={"/settings"} render={() => <PageSettings />} />
+                            <Route path={"/"} render={() => <MainPage />} />
+                            <Route path={"*"} render={() => <UnknownPage />} />
+                        </Switch>
+                    </SideBar>
+                </SafeAreaView>
             );
 
         case "loading":
         case "uninit":
             /* TODO: Loading screen? */
-            return null;
+            return (
+                <Text>Loading..</Text>
+            );
     }
 };

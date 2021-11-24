@@ -22,6 +22,7 @@ setTimeout(() => {
 export type PostImageLoaded = {
     status: "loaded",
     uri: string,
+    headers?: { [key: string]: string }
 };
 
 export type PostImageLoadError = {
@@ -29,11 +30,25 @@ export type PostImageLoadError = {
     message: string,
 };
 
+export type ImageLoadResult = {
+    status: "success",
+    imageUri: string,
+
+    unload: () => void,
+} | {
+    status: "failure",
+    message: string,
+    recoverable?: boolean,
+};
+
 export type PostImageInfo = {
-    url: string,
+    identifier: string,
+    metadata: { [key: string]: string },
+
     width: number | null,
     height: number | null,
-    loadImage: () => Promise<PostImageLoaded | PostImageLoadError>
+
+    loadImage: () => Promise<ImageLoadResult>,
 };
 
 export type PostImage = {

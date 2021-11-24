@@ -1,25 +1,26 @@
 import {
     FeedPost,
-    FeedProvider,
+    FeedProvider, ImageLoadResult,
     PostImage,
     PostImageInfo,
-    PostImageLoaded,
-    PostImageLoadError
 } from "../../engine";
 import React, {useCallback, useEffect, useRef, useState} from "react";
 import {
     ActivityIndicator,
     FlatList,
-    Image,
-    ImageProps,
     StyleSheet,
-    Text, TouchableHighlight,
+    Text, TouchableHighlight, TouchableWithoutFeedback,
     View,
     ViewabilityConfig,
-    ViewToken
+    ViewToken,
 } from "react-native";
 import {useObjectReducer} from "../hooks/ObjectReducer";
 import {AppSettings, Setting} from "../../Settings";
+import {PlatformImage, PlatformImageProps} from "./platform-image";
+import {createItemCache} from "../../engine/cache/Cache";
+import {MemoryCacheResolver} from "../../engine/cache/CacheResolver";
+import {PostImageRenderer} from "./PostImage";
+import {setImagePreview} from "./ImageDetailedView";
 
 const FeedLoadingFooter = () => {
     return (
@@ -50,73 +51,6 @@ const style = StyleSheet.create({
     }
 });
 
-type ProxiedImageLoadState = {
-    state: "loading" | "unloaded"
-} | {
-    state: "loaded",
-    uri: string
-} | {
-    state: "error",
-    message: string
-};
-
-const ProxiedImageLoad = React.memo((props: { source: PostImageInfo } & Omit<ImageProps, "source">) => {
-    const [ state, dispatch ] = useObjectReducer<ProxiedImageLoadState>({
-        state: "unloaded"
-    }, { immer: true })({
-        load: draft => {
-            if(draft.state !== "unloaded") {
-                return;
-            }
-
-            props.source.loadImage().then(result => dispatch("handleLoadResult", result));
-
-            return { state: "loading" };
-        },
-        handleLoadResult: (draft, result: PostImageLoaded | PostImageLoadError) => {
-            if(result.status !== "loaded") {
-                console.error("Result: %o", result);
-                return;
-            }
-
-            return {
-                state: "loaded",
-                uri: result.uri
-            }
-        }
-    });
-
-    if(state.state === "unloaded") {
-        dispatch("load");
-    }
-
-
-    switch (state.state) {
-        case "loading":
-        case "unloaded":
-            return null;
-
-        case "loaded":
-            return (
-                <Image
-                    {...props}
-                    source={{ uri: state.uri }}
-                />
-            );
-
-        case "error":
-        default:
-            debugger;
-            /* TODO: Error message somehow? */
-            return (
-                <Image
-                    {...props}
-                    source={{ uri: "__error__" }}
-                />
-            );
-    }
-})
-
 const FeedPostImageRenderer = React.memo((props: { image: PostImage, viewObserver: ViewObserver, itemId: number }) => {
     const [ visible, setVisible ] = useState(false);
     useEffect(() => {
@@ -140,35 +74,34 @@ const FeedPostImageRenderer = React.memo((props: { image: PostImage, viewObserve
     const hqImage = props.image.detailed;
     const [ hqImageLoaded, setHqImageLoaded ] = useState(false);
 
+    let images = [];
+
     if(!hqImage || previewImage === hqImage) {
-        return (
-            <ProxiedImageLoad
+        images.push(
+            <PostImageRenderer
+                key={"single"}
                 style={{ height: "100%", width: "100%" }}
                 source={previewImage}
-                resizeMethod={"resize"}
+                resizeMode={"contain"}
+            />
+        );
+    } else {
+        images.push(
+            <PostImageRenderer
+                key={"preview"}
+                style={[style.absoluteImage, { opacity: AppSettings.getValue(Setting.PreviewOpacity) }]}
+                source={previewImage}
                 resizeMode={"contain"}
             />
         );
     }
 
-    let images = [];
-    images.push(
-        <ProxiedImageLoad
-            key={"preview"}
-            style={[style.absoluteImage, { opacity: AppSettings.getValue(Setting.PreviewOpacity) }]}
-            source={previewImage}
-            resizeMethod={"resize"}
-            resizeMode={"contain"}
-        />
-    );
-
     if(visible) {
         images.push(
-            <ProxiedImageLoad
+            <PostImageRenderer
                 key={"hq"}
                 style={[style.absoluteImage, { opacity: hqImageLoaded ? 1 : 0 }]}
                 source={hqImage}
-                resizeMethod={"resize"}
                 resizeMode={"contain"}
 
                 onLoad={() => setHqImageLoaded(true)}
@@ -177,9 +110,17 @@ const FeedPostImageRenderer = React.memo((props: { image: PostImage, viewObserve
     }
 
     return (
-        <View style={{ position: "absolute", height: "100%", width: "100%" }}>
-            {images}
-        </View>
+        <TouchableWithoutFeedback
+            onPress={() => {
+                setImagePreview(hqImage || previewImage);
+            }}
+        >
+            <View
+                style={{ position: "absolute", height: "100%", width: "100%" }}
+            >
+                {images}
+            </View>
+        </TouchableWithoutFeedback>
     )
 });
 
@@ -203,7 +144,9 @@ const FeedViewEntryRender = React.memo((props: { item: FeedPost, index: number, 
         return null;
     }
 
-    if(props.item.images.length === 1) {
+    if(props.item.images.length === 0) {
+        return null;
+    } else if(props.item.images.length === 1) {
         return (
             <View style={{ marginTop: 5, marginBottom: 5, height: props.itemHeight, width: "100%" }} key={"image-default"}>
                 <FeedPostImageRenderer image={props.item.images[0]} viewObserver={props.viewObserver} itemId={props.index} />
@@ -259,7 +202,6 @@ export const FeedView = React.memo((props: {
                 return;
             }
 
-            console.error("Fetching!");
             prevState.loading = true;
             prevState.page += 1;
 

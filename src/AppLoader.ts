@@ -1,8 +1,8 @@
 import {AppSettings} from "./Settings";
 import {createSlice} from "@reduxjs/toolkit";
 import {AppStore} from "./AppState";
-import {setupPlatformUiFunctions} from "./ui/SetupPlatform";
-import {setupLocalProxyClient} from "./engine/request/LocalProxyClient";
+import {setupPlatformFunctions} from "./ui/SetupPlatform";
+import {setupBlogs} from "./engine/Blogs";
 
 type LoaderState = {
     status: "loading" | "uninit" | "load"
@@ -36,8 +36,8 @@ export async function executeLoading() {
     AppStore.dispatch(loaderSlice.actions.setLoading());
 
     await AppSettings.initialize();
-    await setupPlatformUiFunctions();
-    setupLocalProxyClient(); /* Web only! */
+    await setupPlatformFunctions();
+    await setupBlogs();
 
     AppStore.dispatch(loaderSlice.actions.setLoaded());
 }

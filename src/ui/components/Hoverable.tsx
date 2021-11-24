@@ -1,11 +1,20 @@
 import React, {useState} from "react";
-import {Animated, StyleProp, ViewProps, ViewStyle} from "react-native";
+import {Animated, Platform, StyleProp, ViewProps, ViewStyle} from "react-native";
 
 export const Hoverable = (props: {
-    children?: React.ReactChild | ((hovered: boolean) => React.ReactChild),
+    children: React.ReactElement | ((hovered: boolean) => React.ReactElement),
     onHoverIn?: () => void,
     onHoverOut?: () => void,
 }) => {
+    if(Platform.OS !== "web") {
+        /* Hover is only supported for web platforms. */
+        if(typeof props.children === "function") {
+            return props.children(false);
+        } else {
+            return props.children;
+        }
+    }
+
     const [ hovered, setHovered ] = useState(false);
     const [ showHovered, setShowHovered ] = useState(true);
 
@@ -82,6 +91,7 @@ export class HoverAnimatedView extends React.PureComponent<{
         if(!Array.isArray(style)) {
             style = [ style ];
         }
+
         if(typeof this.props.hoverStyle === "function") {
             const result = this.props.hoverStyle(this.animation);
             if(Array.isArray(result)) {

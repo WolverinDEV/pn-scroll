@@ -1,15 +1,19 @@
-import {
-    BlogProvider,
-    FeedPost,
-    FeedFilter,
-    FeedProvider,
-    PostImageInfo,
-    PostImageLoaded,
-    PostImageLoadError
-} from "../index";
+import {BlogProvider, FeedFilter, FeedPost, FeedProvider, ImageLoadResult, PostImageInfo} from "../index";
 import {executeRequest} from "../request";
-import {CachedPageLoader} from "./Helper";
-import {ImageCache} from "../cache/Image";
+import {ensurePageLoaderSuccess} from "./Helper";
+import {HTMLElement} from "node-html-parser";
+import {
+    CacheKey,
+    createItemCache,
+    ItemCache,
+    ItemCacheResolver,
+    ResolveOptions,
+    ResolveResult,
+    ResolverRole
+} from "../cache/Cache";
+import {MemoryCacheResolver} from "../cache/CacheResolver";
+import {extractErrorMessage} from "../../utils";
+import {downloadImage} from "../request/Image";
 
 type KonachenPage = {
     navigator: {
@@ -20,63 +24,26 @@ type KonachenPage = {
     posts: FeedPost[],
 };
 
-class KonachenImageCache extends ImageCache {
-    constructor() {
-        super();
-    }
-    
-    protected async doLoadImage(imageUrl: string): Promise<PostImageLoaded | PostImageLoadError> {
-        const result = await executeRequest({
-            type: "GET",
-            responseType: "binary",
-            url: imageUrl,
-            headers: { }
-        });
-
-        if(result.status !== "success") {
-            return { status: "error", message: `${result.statusCode}: ${result.payload}` };
-        }
-
-        if(result.headers["content-type"].indexOf("image") !== -1) {
-            const data = new Blob([ result.payload ], { type: result.headers["content-type"] });
-            const url = URL.createObjectURL(data);
-
-            return {
-                status: "loaded",
-                uri: url
-            };
-        }
-
-        console.error("HTML Result: %o", result);
-        return { status: "error", message: "html result" };
-    }
+export function downloadKonachenImage(url: string): Promise<ImageLoadResult> {
+    return downloadImage(url, { });
 }
 
-const imageCache = new KonachenImageCache();
-class KonachenPageLoader extends CachedPageLoader<KonachenPage> {
-    constructor(readonly url: string) {
-        super();
+class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
+    constructor(readonly url: string) { }
+
+    cached(key: CacheKey<number>): boolean { return false; }
+    delete(key: CacheKey<number>): void { }
+    save(key: CacheKey<number>, value: KonachenPage): void { }
+
+    name(): string {
+        return "Konachen page loader";
     }
 
-    protected async doLoadPage(target: number): Promise<KonachenPage> {
-        const response = await executeRequest({
-            type: "GET",
-            url: `https://${this.url}/post`,
-            urlParameters: {
-                tags: "bondage",
-                page: target
-            },
-            responseType: "html"
-        });
-
-        if(response.status !== "success") {
-            throw response.statusText + " (" + response.payload + ")";
-        }
-
-        return this.parsePage(response.payload);
+    role(): ResolverRole {
+        return "resolver";
     }
 
-    private parsePage(element: Document) : KonachenPage {
+    private parsePage(container: HTMLElement) : KonachenPage {
         let result: KonachenPage = {
             navigator: {
                 current: null,
@@ -84,8 +51,6 @@ class KonachenPageLoader extends CachedPageLoader<KonachenPage> {
             },
             posts: []
         };
-
-        let container = element.body;
 
         /* extract the page count */
         {
@@ -131,10 +96,12 @@ class KonachenPageLoader extends CachedPageLoader<KonachenPage> {
 
                     const imageUrl = thumbnailImageNode.getAttribute("src")!;
                     previewImage = {
+                        identifier: imageUrl,
+                        metadata: {},
+
                         width: parseInt(thumbnailImageNode.getAttribute("width") || ""),
                         height: parseInt(thumbnailImageNode.getAttribute("height") || ""),
-                        url: thumbnailImageNode.getAttribute("src")!,
-                        loadImage: () => imageCache.loadImage(imageUrl)
+                        loadImage: () => downloadKonachenImage(imageUrl)
                     }
                 }
 
@@ -155,10 +122,12 @@ class KonachenPageLoader extends CachedPageLoader<KonachenPage> {
 
                     const imageUrl = directLinkNode.getAttribute("href")!;
                     detailedImage = {
+                        identifier: imageUrl,
+                        metadata: {},
+
                         width: width,
                         height: height,
-                        url: imageUrl,
-                        loadImage: () => imageCache.loadImage(imageUrl)
+                        loadImage: () => downloadKonachenImage(imageUrl)
                     }
                 }
 
@@ -178,14 +147,51 @@ class KonachenPageLoader extends CachedPageLoader<KonachenPage> {
 
         return result;
     }
+
+    async resolve(key: CacheKey<number>, options: ResolveOptions<KonachenPage>): Promise<ResolveResult<KonachenPage>> {
+        const response = await executeRequest({
+            type: "GET",
+            url: `https://${this.url}/post`,
+            urlParameters: {
+                tags: "bondage",
+                page: key.key
+            },
+            responseType: "html"
+        });
+
+        if(response.status !== "success") {
+            return {
+                status: "cache-error",
+                message: response.statusText + " (" + response.payload + ")"
+            };
+        }
+
+        try {
+            return {
+                status: "cache-hit",
+                value: this.parsePage(response.payload),
+            };
+        } catch (error) {
+            return {
+                status: "cache-error",
+                message: extractErrorMessage(error)
+            }
+        }
+    }
 }
 
 class KonachenFeedProvider implements FeedProvider {
     private static kPostsPerSite = 18;
-    private pageLoader: KonachenPageLoader;
+    private pageLoader: ItemCache<number, KonachenPage>;
 
     constructor(readonly url: string, readonly filter: FeedFilter) {
-        this.pageLoader = new KonachenPageLoader(url);
+        this.pageLoader =  createItemCache<number, KonachenPage>(
+            page => page.toString(),
+            [
+                new MemoryCacheResolver(),
+                new KonachenPageLoader(url)
+            ]
+        );
     }
 
     randomAccessSupported(target: "page" | "entry"): boolean {
@@ -194,30 +200,22 @@ class KonachenFeedProvider implements FeedProvider {
     }
 
     async getEntryCount(): Promise<number> {
-        const firstPage = await this.pageLoader.loadPage(1);
-        if(firstPage.status !== "success") {
-            throw "failed to load first page (" + firstPage.message + ")";
-        } else if(typeof firstPage.page.navigator.max !== "number") {
+        const firstPage = await ensurePageLoaderSuccess(this.pageLoader, 1);
+        if(typeof firstPage.navigator.max !== "number") {
             throw "first page misses page count";
         }
 
-        const lastPage = await this.pageLoader.loadPage(firstPage.page.navigator.max);
-        if(lastPage.status !== "success") {
-            throw "failed to load last page (" + lastPage.message + ")";
-        }
-
-        return (firstPage.page.navigator.max - 1) * KonachenFeedProvider.kPostsPerSite + lastPage.page.posts.length;
+        const lastPage = await ensurePageLoaderSuccess(this.pageLoader, firstPage.navigator.max);
+        return (firstPage.navigator.max - 1) * KonachenFeedProvider.kPostsPerSite + lastPage.posts.length;
     }
 
     async getPageCount(): Promise<number> {
-        const firstPage = await this.pageLoader.loadPage(1);
-        if(firstPage.status !== "success") {
-            throw "failed to load first page (" + firstPage.message + ")";
-        } else if(typeof firstPage.page.navigator.max !== "number") {
+        const firstPage = await ensurePageLoaderSuccess(this.pageLoader, 1);
+        if(typeof firstPage.navigator.max !== "number") {
             throw "first page misses page count";
         }
 
-        return firstPage.page.navigator.max;
+        return firstPage.navigator.max;
     }
 
     async loadEntry(target: number): Promise<FeedPost> {
@@ -229,12 +227,8 @@ class KonachenFeedProvider implements FeedProvider {
     }
 
     async loadPage(target: number): Promise<FeedPost[]> {
-        const page = await this.pageLoader.loadPage(target);
-        if(page.status === "success") {
-            return page.page.posts;
-        } else {
-            throw "failed to load page (" + page.message + ")";
-        }
+        const page = await ensurePageLoaderSuccess(this.pageLoader, target);
+        return page.posts;
     }
 }
 

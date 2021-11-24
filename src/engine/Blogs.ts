@@ -46,8 +46,8 @@ function activateBlog(blog: keyof typeof BlogRegistry) {
     AppStore.dispatch(blogRegistrySlice.actions.updateBlogs());
 }
 
-setTimeout(() => {
+export async function setupBlogs() {
     activateBlog("konachen");
     activateBlog("konachen-sfw");
     activateBlog("that-pervert");
-}, 1000);
+}

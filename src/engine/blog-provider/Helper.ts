@@ -1,62 +1,32 @@
-import {extractErrorMessage} from "../../utils";
+import {ItemCache} from "../cache/Cache";
+import * as stream from "stream";
 
-export type CachedPageSuccess<T> = {
-    status: "success",
-    page: T
-};
+export async function ensurePageLoaderSuccess<K, V>(loader: ItemCache<K, V>, key: K): Promise<V> {
+    const page = await loader.resolve(key);
+    switch (page.status) {
+        case "error":
+            throw new Error("page load error: " + page.message);
 
-export type CachedPageError = {
-    status: "error",
-    message: string
-};
+        case "missing":
+            throw new Error("page could not be loaded");
 
-export type CachedPageLoading = {
-    status: "loading",
-    callbacks: (() => void)[]
-};
-
-export abstract class CachedPageLoader<T> {
-    private pageCache: (CachedPageSuccess<T> | CachedPageError | CachedPageLoading)[] = [];
-
-    public async loadPage(target: number) : Promise<CachedPageSuccess<T> | CachedPageError> {
-        if(typeof this.pageCache[target] !== "undefined") {
-            const entry = this.pageCache[target];
-            if(entry.status === "loading") {
-                await new Promise<void>(resolve => entry.callbacks.push(resolve));
-                return this.loadPage(target);
-            }
-
-            return entry;
-        }
-
-        const loadingEntry: CachedPageLoading = this.pageCache[target] = {
-            status: "loading",
-            callbacks: []
-        };
-
-        try {
-            this.pageCache[target] = {
-                status: "success",
-                page: await this.doLoadPage(target)
-            };
-        } catch (error) {
-            console.error(error);
-            this.pageCache[target] = {
-                status: "error",
-                message: extractErrorMessage(error)
-            };
-        }
-
-        for(const callback of loadingEntry.callbacks) {
-            callback();
-        }
-        return this.loadPage(target);
+        case "resolved":
+            return page.value;
     }
+}
 
-    /**
-     * Load the target page.
-     * If an error occurred just throw them as an `Error`.
-     * @protected
-     */
-    protected abstract doLoadPage(target: number) : Promise<T>;
+export function kvHeadersToObject(headers: { [key: string]: string }) {
+    const result = new Headers();
+    for(const header of Object.keys(headers)) {
+        result.append(header, headers[header]);
+    }
+    return result;
+}
+
+export function objectHeadersToKv(headers: Headers) {
+    const result: { [key: string]: string } = {};
+    for(const [ key, value ] of headers) {
+        result[key] = value;
+    }
+    return result;
 }

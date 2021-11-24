@@ -2,7 +2,7 @@ import {SettingsBackend} from "./Settings";
 
 export default new class implements SettingsBackend {
     async loadSettings(): Promise<{ [key: string]: string }> {
-        throw new Error("Method not implemented.");
+        return {};
     }
 
     saveSetting(key: string, value: string): void {

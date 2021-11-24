@@ -1,5 +1,7 @@
 import { executeLocalProxyRequest } from "./LocalProxyClient";
-import { parsePayloadHtml } from "./ParserHTML";
+import {Platform} from "react-native";
+import {Buffer} from "buffer";
+import {parse as parseHtml, HTMLElement} from "node-html-parser";
 
 export type ImplHttpRequestParameters = {
     headers: { [key: string]: string },
@@ -46,7 +48,7 @@ export type HttpRequest = HttpGetRequest | HttpPostRequest;
 
 interface HttpResponseType {
     "json": object,
-    "html": Document,
+    "html": HTMLElement,
     "binary": ArrayBuffer,
     "text": string
 }
@@ -116,7 +118,7 @@ export async function executeRequest<R extends keyof HttpResponseType>(
         implRequest.headers["User-Agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1";
     }
 
-    const implResponse = await executeLocalProxyRequest(implRequest);
+    const implResponse = await doExecuteRequest(implRequest);
     switch (implResponse.status) {
         case "failure-internal":
             return {
@@ -149,7 +151,7 @@ export async function executeRequest<R extends keyof HttpResponseType>(
                         break;
 
                     case "html":
-                        response = parsePayloadHtml(await arrayBuffer2String(implResponse.payload));
+                        response = parseHtml(await arrayBuffer2String(implResponse.payload), { lowerCaseTagName: false })
                         break;
 
                     case "json":
@@ -189,12 +191,79 @@ export async function executeRequest<R extends keyof HttpResponseType>(
     }
 }
 
-function string2ArrayBuffer(value: string) : Promise<ArrayBuffer> {
-    const blob = new Blob([ value ], { type: 'text/plain; charset=utf-8' });
-    return blob.arrayBuffer();
+function arrayBuffer2String(buffer: ArrayBuffer) : Promise<string> {
+    if(Platform.OS === "web") {
+        const blob = new Blob([ buffer ], { type: 'text/plain; charset=utf-8' });
+        return blob.text();
+    } else {
+        return Promise.resolve(
+            Buffer.from(buffer).toString("utf-8")
+        );
+    }
 }
 
-function arrayBuffer2String(buffer: ArrayBuffer) : Promise<string> {
-    const blob = new Blob([ buffer ], { type: 'text/plain; charset=utf-8' });
-    return blob.text();
+function doExecuteRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
+    switch (Platform.OS) {
+        case "web":
+            return executeLocalProxyRequest(request);
+
+        case "android":
+        case "ios":
+            return executeReactNativeFetch(request);
+
+        default:
+            return Promise.resolve({
+                status: "failure-internal",
+                message: "missing request driver"
+            });
+    }
+}
+
+function executeReactNativeFetch(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
+    /*
+     * We have to use XMLHttpRequests since react-natives fetch implementation does not support arrayBuffer() yet.
+     * If it would we could use a similar implementation like the local proxy.
+     */
+    const xmlRequest = new XMLHttpRequest();
+    xmlRequest.responseType = "arraybuffer";
+
+    xmlRequest.open(request.method, request.url, true);
+    for(const key of Object.keys(request.headers)) {
+        xmlRequest.setRequestHeader(key, request.headers[key]);
+    }
+    if(request.body?.byteLength) {
+        xmlRequest.send(request.body);
+    } else {
+        xmlRequest.send();
+    }
+
+    return new Promise<ImplHttpResponse>(resolve => {
+        xmlRequest.onreadystatechange = () => {
+            if(xmlRequest.readyState === XMLHttpRequest.DONE) {
+                const responseHeaders: { [key: string]: string } = {};
+                for(const line of xmlRequest.getAllResponseHeaders().trim().split(/[\r\n]+/)) {
+                    const parts = line.split(': ');
+                    const header = parts.shift()!;
+                    responseHeaders[header] = parts.join(': ');
+                }
+
+                resolve({
+                    status: xmlRequest.status === 200 ? "success" : "failure",
+                    statusCode: xmlRequest.status,
+                    statusText: xmlRequest.statusText,
+                    headers: responseHeaders,
+                    payload: xmlRequest.response
+                })
+            }
+        };
+
+        xmlRequest.onerror = () => {
+            console.error("ERROR!");
+            /* TODO: Is there any way to get more info? */
+            resolve({
+                status: "failure-internal",
+                message: "request failed"
+            });
+        }
+    });
 }
