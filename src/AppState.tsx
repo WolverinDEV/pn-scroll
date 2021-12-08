@@ -3,14 +3,12 @@ import {useDispatch as originalUseDispatch, useSelector as originalUseSelector} 
 import {blogRegistryReducer} from "./engine/Blogs";
 import {sidebarReducer} from "./ui/components/SideBar";
 import {loaderReducer} from "./AppLoader";
-import {imageDetailedViewReducer} from "./ui/components/ImageDetailedView";
 
 export const AppStore = configureStore({
     reducer: {
         sidebar: sidebarReducer,
         blogRegistry: blogRegistryReducer,
         loader: loaderReducer,
-        detailedImage: imageDetailedViewReducer,
     }
 });
 

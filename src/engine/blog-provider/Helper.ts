@@ -1,5 +1,30 @@
 import {ItemCache} from "../cache/Cache";
-import * as stream from "stream";
+
+export function promisifyIDBRequest<T>(request: IDBRequest<T>) : Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+    });
+}
+
+export function asyncIDBIterator(request: IDBRequest<IDBCursorWithValue | null>) : AsyncIterable<{ value: any, cursor: Omit<IDBCursor, "continue" | "continuePrimaryKey"> }> {
+    let cursor: IDBCursorWithValue | null;
+    return {
+        [Symbol.asyncIterator]() {
+            return {
+                async next() {
+                    cursor?.continue();
+                    cursor = await promisifyIDBRequest(request);
+                    if(!cursor) {
+                        return { done: true, value: null };
+                    }
+
+                    return { value: { value: cursor.value, cursor }, done: false };
+                }
+            }
+        }
+    }
+}
 
 export async function ensurePageLoaderSuccess<K, V>(loader: ItemCache<K, V>, key: K): Promise<V> {
     const page = await loader.resolve(key);

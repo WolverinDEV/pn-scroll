@@ -1,10 +1,11 @@
-import React, {useEffect, useRef, useState} from "react";
+import React, {DependencyList, useEffect, useRef, useState} from "react";
 import { produce } from "immer";
 
 type ChangeList = { head: ChangeItem | undefined, tail: ChangeItem | undefined };
 type ChangeItem = { next?: ChangeItem, action: string, payload: any };
-type ObjectReducerOptions = { immer?: boolean };
+type ObjectReducerOptions = { immer?: boolean, deps?: DependencyList };
 
+const kUninitializedState = Symbol("uninitialized");
 const processChanges = (stateRef: React.MutableRefObject<any>, reducerObject: any, changes: ChangeList, options: ObjectReducerOptions) : boolean => {
     const savedState = stateRef.current;
 
@@ -26,14 +27,14 @@ const processChanges = (stateRef: React.MutableRefObject<any>, reducerObject: an
 };
 
 /* Special reducer return type since immer is false. By default we're using immer */
-export function useObjectReducer<S>(initialState: S | (() => S), options?: { immer: false }):
+export function useObjectReducer<S extends object>(initialState: S | (() => S), options?: { immer: false }):
     <R extends { [ key: string ]: (draft: S, payload: any) => S }>(reducer: R) => [
         S,
         <A extends keyof R>(action: A, ...payload: Parameters<R[A]> extends [ S, infer P ] ? [ P ] : [ ] ) => void
     ];
 
 /* Default signature */
-export function useObjectReducer<S>(initialState: S | (() => S), options?: ObjectReducerOptions):
+export function useObjectReducer<S extends object>(initialState: S | (() => S), options?: ObjectReducerOptions):
     <R extends { [ key: string ]: (draft: S, payload: any) => void | S }>(reducer: R) => [
         S,
         <A extends keyof R>(action: A, ...payload: Parameters<R[A]> extends [ S, infer P ] ? [ P ] : [ ] ) => void
@@ -46,7 +47,7 @@ export function useObjectReducer<S>(initialState: S | (() => S), options?: Objec
  * @param initialState Initial reducer state.
  * @param options
  */
-export function useObjectReducer<S>(initialState: S | (() => S), options?: ObjectReducerOptions):
+export function useObjectReducer<S extends object>(initialState: S | (() => S), options?: ObjectReducerOptions):
     <R extends { [ key: string ]: (prevState: S, payload: any) => void | S }>(reducer: R) => [
         S,
         <A extends keyof R>(action: A, ...payload: Parameters<R[A]> extends [ S, infer P ] ? [ P ] : [ ] ) => void
@@ -54,7 +55,7 @@ export function useObjectReducer<S>(initialState: S | (() => S), options?: Objec
 {
     options = options || { immer: true };
     return reducer => {
-        const stateRef = useRef<S>();
+        const stateRef = useRef<S | typeof kUninitializedState>(kUninitializedState);
         const pendingChanges = useRef<ChangeList & { updateTask: any }>({
             head: undefined,
             tail: undefined,
@@ -67,18 +68,20 @@ export function useObjectReducer<S>(initialState: S | (() => S), options?: Objec
 
             /* flush all changes */
             processChanges(stateRef, reducer, pendingChanges.current, options!);
-        }, [ ]);
 
-        if(typeof stateRef.current === "undefined") {
+            stateRef.current = kUninitializedState;
+            /* TODO: Reset renderState as well! */
+        }, (options!.deps || [ ]));
+
+        if(stateRef.current === kUninitializedState) {
             if(typeof initialState === "function") {
-                // @ts-ignore
                 stateRef.current = initialState();
             } else {
                 stateRef.current = initialState;
             }
         }
 
-        const [ renderState, setRenderState ] = useState(stateRef.current!);
+        const [ renderState, setRenderState ] = useState<S>(stateRef.current as S);
 
         return [
             renderState,
@@ -97,7 +100,7 @@ export function useObjectReducer<S>(initialState: S | (() => S), options?: Objec
                     changeList.updateTask = setTimeout(() => {
                         changeList.updateTask = undefined;
                         if(processChanges(stateRef, reducer, changeList, options!)) {
-                            setRenderState(stateRef.current!);
+                            setRenderState(stateRef.current as S);
                         }
                     });
                 }

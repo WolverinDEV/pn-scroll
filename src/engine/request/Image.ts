@@ -1,5 +1,6 @@
-import {ImageLoadResult} from "../index";
 import {NativeFunctions} from "../NativeFunctions";
+import {PostImage} from "../index";
+import ImageLoadResult = PostImage.ImageLoadResult;
 
 export async function downloadImage(url: string, headers: { [key: string]: string }): Promise<ImageLoadResult> {
     const result = await NativeFunctions.downloadImage(url, headers);

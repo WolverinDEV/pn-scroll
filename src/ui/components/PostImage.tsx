@@ -1,11 +1,13 @@
 import {createItemCache} from "../../engine/cache/Cache";
-import {ImageLoadResult, PostImageInfo} from "../../engine";
 import {MemoryCacheResolver} from "../../engine/cache/CacheResolver";
 import React, {useEffect, useState} from "react";
 import {PlatformImage, PlatformImageProps} from "./platform-image";
+import {BlogProvider, PostImage} from "../../engine";
+import ImageLoadResult = PostImage.ImageLoadResult;
+import ImageInfo = PostImage.ImageInfo;
 
-const imageCache = createItemCache<PostImageInfo, ImageLoadResult>(
-    key => key.identifier,
+const imageCache = createItemCache<{ info: ImageInfo, blog: BlogProvider }, ImageLoadResult>(
+    key => key.info.identifier,
     [
         /*
          * FIXME: Cache timeout 60 seconds or something.
@@ -15,14 +17,14 @@ const imageCache = createItemCache<PostImageInfo, ImageLoadResult>(
         async key => {
             return {
                 status: "cache-hit",
-                value: await key.loadImage(),
+                value: await key.blog.loadImage(key.info),
             };
         }
     ]
 );
 const kImageDownloadUnavailable: ImageLoadResult = { status: "failure", message: "download unavailable", recoverable: false };
 
-export const PostImageRenderer = React.memo((props: { source: PostImageInfo } & Omit<PlatformImageProps, "source">) => {
+export const PostImageRenderer = React.memo((props: { source: ImageInfo, blog: BlogProvider } & Omit<PlatformImageProps, "source">) => {
     const [ imageUri, setImageUri ] = useState<string | null>(null);
 
     useEffect(() => {
@@ -34,7 +36,7 @@ export const PostImageRenderer = React.memo((props: { source: PostImageInfo } & 
             unloadCallback: undefined
         };
 
-        imageCache.resolve(props.source, { defaultValue: kImageDownloadUnavailable }).then(result => {
+        imageCache.resolve({ info: props.source, blog: props.blog }, { defaultValue: kImageDownloadUnavailable }).then(result => {
             if(refAbort.aborted) {
                 if(result.status === "success") {
                     result.unload();

@@ -8,6 +8,7 @@ import {AppRouter} from "./ui/Router";
 import "./declarations";
 import {ImageDetailedViewHook} from "./ui/components/ImageDetailedView";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {PortalProvider} from "@gorhom/portal";
 
 namespace Colors {
     export const primary = '#1292B4';
@@ -28,14 +29,16 @@ const App: () => Node = () => {
 
     return (
         <Provider store={AppStore}>
-            <AppRouter>
-                <SafeAreaProvider>
-                    <View style={backgroundStyle}>
-                        <AppView />
-                    </View>
-                </SafeAreaProvider>
-                <ImageDetailedViewHook />
-            </AppRouter>
+            <PortalProvider>
+                <AppRouter>
+                    <SafeAreaProvider>
+                        <View style={backgroundStyle}>
+                            <AppView />
+                        </View>
+                    </SafeAreaProvider>
+                    <ImageDetailedViewHook />
+                </AppRouter>
+            </PortalProvider>
         </Provider>
     );
 };

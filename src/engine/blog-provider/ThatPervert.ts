@@ -1,9 +1,9 @@
 import {
     BlogProvider,
     FeedFilter,
-    FeedPost,
-    FeedProvider, ImageLoadResult,
-    PostImage,
+    FeedEntry,
+    FeedProvider,
+    PostImage, SuggestionResult,
 } from "../index";
 import {ensurePageLoaderSuccess} from "./Helper";
 import {executeRequest} from "../request";
@@ -19,6 +19,11 @@ import {
 import {extractErrorMessage} from "../../utils";
 import {MemoryCacheResolver} from "../cache/CacheResolver";
 import {downloadImage} from "../request/Image";
+import "./ThatPervertTagGenerator";
+const knownTags = import("./ThatPervertTags.json");
+knownTags.then(result => {
+    console.info("Known tags: %o", result.length);
+});
 
 type ThatPervertPage = {
     navigator: {
@@ -27,20 +32,15 @@ type ThatPervertPage = {
         next: number | "main" | null,
     },
 
-    posts: FeedPost[],
+    posts: FeedEntry[],
 };
-
-export function downloadThatPervertImage(url: string): Promise<ImageLoadResult> {
-    return downloadImage(url, {
-        Referer: "http://thatpervert.com"
-    });
-}
 
 class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage> {
     private readonly urlBase: string;
 
     constructor() {
         this.urlBase = "http://thatpervert.com/tag/Masturbation+Hentai";
+        this.urlBase = "http://thatpervert.com/";
     }
 
     cached(key: CacheKey<number>): boolean { return false; }
@@ -156,8 +156,6 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
 
                                 width: null,
                                 height: null,
-
-                                loadImage: () => downloadThatPervertImage(detailedUrl)
                             },
                             preview: {
                                 identifier: previewUrl,
@@ -165,8 +163,6 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
 
                                 width: parseInt(previewNode.getAttribute("width")!),
                                 height: parseInt(previewNode.getAttribute("height")!),
-
-                                loadImage: () => downloadThatPervertImage(previewUrl)
                             },
                             other: []
                         });
@@ -180,8 +176,6 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
 
                                 width: parseInt(previewNode.getAttribute("width")!),
                                 height: parseInt(previewNode.getAttribute("height")!),
-
-                                loadImage: () => downloadThatPervertImage(previewUrl)
                             },
                             preview: null,
                             other: []
@@ -191,6 +185,7 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
 
                 result.posts.push({
                     type: "image",
+                    id: postUrl,
                     images: postImages,
                     metadata: {
                         detailedPostUrl: postUrl
@@ -204,8 +199,7 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
 }
 
 class ThatPervertFeedProvider implements FeedProvider {
-    private static kPostsPerSite = 10;
-    private pageLoader: ItemCache<number, ThatPervertPage>;
+    private readonly pageLoader: ItemCache<number, ThatPervertPage>;
 
     constructor(readonly filter: FeedFilter) {
         this.pageLoader =  createItemCache<number, ThatPervertPage>(
@@ -222,25 +216,6 @@ class ThatPervertFeedProvider implements FeedProvider {
         return true;
     }
 
-    async getEntryCount(): Promise<number> {
-        throw "not yet implemented!";
-        /*
-        const firstPage = await this.pageLoader.loadPage(1);
-        if(firstPage.status !== "success") {
-            throw "failed to load first page (" + firstPage.message + ")";
-        } else if(typeof firstPage.page.navigator.max !== "number") {
-            throw "first page misses page count";
-        }
-
-        const lastPage = await this.pageLoader.loadPage(firstPage.page.navigator.max);
-        if(lastPage.status !== "success") {
-            throw "failed to load last page (" + lastPage.message + ")";
-        }
-
-        return (firstPage.page.navigator.max - 1) * KonachenFeedProvider.kPostsPerSite + lastPage.page.posts.length;
-        */
-    }
-
     async getPageCount(): Promise<number> {
         const firstPage = await ensurePageLoaderSuccess(this.pageLoader, -1);
 
@@ -255,19 +230,10 @@ class ThatPervertFeedProvider implements FeedProvider {
         }
     }
 
-    async loadEntry(target: number): Promise<FeedPost> {
-        return { type: "error", errorType: "not-found" };
-    }
-
-    async loadEntryRef(target: any): Promise<FeedPost> {
-        return { type: "error", errorType: "not-found" };
-    }
-
-    async loadPage(target: number): Promise<FeedPost[]> {
-        //  console.error("Load page: %o/%o", target, await this.getPageCount());
-
-        /* FIXME: Thatpervert is alignt to the front. This means that page 1 contains some items from page 2 */
-        const page = await ensurePageLoaderSuccess(this.pageLoader, await this.getPageCount() - target + 1);
+    async loadPage(target: number): Promise<FeedEntry[]> {
+        const pageCount = await this.getPageCount();
+        /* FIXME: ThatPervert aligns to the front or back depending if we're searching or browsing. */
+        const page = await ensurePageLoaderSuccess(this.pageLoader, pageCount - target + 1);
         return page.posts;
     }
 }
@@ -290,4 +256,13 @@ export class ThatPervertBlogProvider implements BlogProvider {
         return new ThatPervertFeedProvider({});
     }
 
+    async queryTagSuggestions(text: string, abortSignal: AbortSignal): Promise<SuggestionResult> {
+        return { status: "error", message: "not implemented" };
+    }
+
+    loadImage(image: PostImage.ImageInfo): Promise<PostImage.ImageLoadResult> {
+        return downloadImage(image.identifier, {
+            Referer: "http://thatpervert.com"
+        });
+    }
 }

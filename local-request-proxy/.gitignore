@@ -1,2 +1,4 @@
 dist
 node_modules
+ssl_key.pem
+ssl_cert.pem

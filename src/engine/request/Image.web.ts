@@ -1,4 +1,3 @@
-import {ImageLoadResult} from "../index";
 import {executeRequest} from "./index";
 import {
     CacheKey,
@@ -10,6 +9,9 @@ import {
 } from "../cache/Cache";
 import {MemoryCacheResolver} from "../cache/CacheResolver";
 import {kvHeadersToObject, objectHeadersToKv} from "../blog-provider/Helper";
+import {PostImage} from "../index";
+import ImageLoadResult = PostImage.ImageLoadResult;
+import {extractErrorMessage} from "../../utils";
 
 type CacheLoadRequest = {
     url: string,
@@ -32,10 +34,21 @@ class WebCacheLoader implements ItemCacheResolver<CacheLoadRequest, CacheLoadRes
         });
     }
 
-    private readonly cache: Promise<Cache>;
+    private readonly cache: Promise<Cache | null>;
 
     constructor() {
-        this.cache = 'caches' in window ? caches.open("image-cache") : Promise.reject(new Error("image cache not supported"));
+        this.cache = WebCacheLoader.initializeImageCache().catch(error => {
+            console.warn("Failed to open image cache.\nThis might impact network usage: %s", extractErrorMessage(error));
+            return null;
+        });
+    }
+
+    private static async initializeImageCache() : Promise<Cache> {
+        if(!("caches" in window)) {
+            throw new Error("image cache not supported");
+        }
+
+        return await caches.open("image-cache");
     }
 
     name(): string {
@@ -53,11 +66,16 @@ class WebCacheLoader implements ItemCacheResolver<CacheLoadRequest, CacheLoadRes
 
     delete(key: CacheKey<CacheLoadRequest>): void {
         const cacheKey = WebCacheLoader.generateRequest(key);
-        this.cache.then(cache => cache.delete(cacheKey));
+        this.cache.then(cache => cache?.delete(cacheKey));
     }
 
     async resolve(key: CacheKey<CacheLoadRequest>, options: ResolveOptions<CacheLoadResult>): Promise<ResolveResult<CacheLoadResult>> {
         const cache = await this.cache;
+        if(!cache) {
+            /* We don't support the image cache. */
+            return { status: "cache-miss" };
+        }
+
         const cacheKey = WebCacheLoader.generateRequest(key);
         const response = await cache.match(cacheKey);
         if(!response) {
@@ -80,7 +98,7 @@ class WebCacheLoader implements ItemCacheResolver<CacheLoadRequest, CacheLoadRes
         }
 
         const cacheKey = WebCacheLoader.generateRequest(key);
-        this.cache.then(cache => cache.put(cacheKey,
+        this.cache.then(cache => cache?.put(cacheKey,
             new Response(value.data, {
                 headers: kvHeadersToObject(value.headers),
             })

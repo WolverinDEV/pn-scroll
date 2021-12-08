@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useMemo, useState} from "react";
 import {
     StyleSheet,
     TouchableWithoutFeedback,
@@ -6,7 +6,7 @@ import {
     Animated,
     Text,
     TouchableNativeFeedback,
-    Platform, TouchableHighlight
+    Platform, TouchableHighlight, TouchableOpacity
 } from "react-native";
 import {Easing} from "../Animations";
 import {AppStore, useAppSelector} from "../../AppState";
@@ -37,8 +37,8 @@ export const sidebarSlice = createSlice({
 export const sidebarReducer = sidebarSlice.reducer;
 export const toggleSideBar = (visible?: boolean) => AppStore.dispatch(sidebarSlice.actions.toggle(visible));
 
-export const SideBar = (props: {
-    children?: React.ReactNode | React.ReactNode[],
+export const SideBar = React.memo((props: {
+    children?: React.ReactChild | React.ReactChild[],
     width?: number,
     animationDuration?: number
 }) => {
@@ -76,12 +76,21 @@ export const SideBar = (props: {
             <Animated.View
                 style={[style.body, { left: showAnimation }]}
             >
-                {props.children}
+                <TouchableWithoutFeedback onPress={() => {
+                    if(!visible) {
+                        return;
+                    }
 
+                    toggleSideBar(false);
+                }}>
+                    <View style={style.innerBody} pointerEvents={visible ? "box-only" : "auto"}>
+                        {props.children}
+                    </View>
+                </TouchableWithoutFeedback>
             </Animated.View>
         </View>
     )
-}
+});
 
 const SideBarRenderer = React.memo(() => {
     const activeBlogs = useAppSelector(state => state.blogRegistry.activeBlogs);
@@ -195,5 +204,9 @@ const style = StyleSheet.create({
         shadowOffset: { width: -1, height: 0 },
         shadowOpacity: .5,
         shadowRadius: 5,
+    },
+    innerBody: {
+        height: "100%",
+        width: "100%",
     }
 });

@@ -1,9 +1,6 @@
-import React, {useEffect, useRef, useState} from "react";
+import React from "react";
 import { Image } from "react-native";
 import {PlatformImageProps} from "./index";
-import {ImageLoadResult, PostImageInfo, PostImageLoadError} from "../../../engine";
-import {createItemCache} from "../../../engine/cache/Cache";
-import {MemoryCacheResolver} from "../../../engine/cache/CacheResolver";
 
 function fn<T>(fn: T | undefined) {
     return fn || (() => {});

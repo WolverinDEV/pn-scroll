@@ -5,7 +5,7 @@ const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const ReactNative = require('@callstack/repack');
 
 const targetPlatform = ReactNative.getPlatform({ fallback: process.env.TARGET_PLATFORM || "android" });
-const mode = ReactNative.getMode({ fallback: "development" });
+const mode = ReactNative.getMode({ fallback: process.env.NODE_ENV || "development" });
 console.log("Generating webpack config for %s on %s", mode, targetPlatform);
 
 /* Notify all other plugins */
@@ -26,9 +26,6 @@ if(targetPlatform === "web") {
             new HTMLWebpackPlugin({
                 title: "Your PN-Feed"
             }),
-            // `process.env.NODE_ENV === 'production'` must be `true` for production
-            // builds to eliminate development checks and reduce build size. You may
-            // wish to include additional optimizations.
             new webpack.DefinePlugin({
                 'process.env.TARGET_PLATFORM': JSON.stringify(targetPlatform),
                 'process.env.NODE_ENV': JSON.stringify(mode),
@@ -38,12 +35,12 @@ if(targetPlatform === "web") {
                 Buffer: ['buffer', 'Buffer'],
             }),
         ],
-        mode,
+        mode: mode,
         devtool: "source-map",
         module: {
             rules: [
                 {
-                    test: /\.js$/,
+                    test: /\.[jt]sx?$/,
                     use: "babel-loader",
                     include: [
                         path.join(__dirname, "node_modules/react-native-vector-icons"),
@@ -83,15 +80,14 @@ if(targetPlatform === "web") {
                 'react-native$': 'react-native-web'
             },
             extensions: [
-                '.web.tsx',
-                '.web.ts',
+                `.${targetPlatform}.tsx`,
+                `.${targetPlatform}.ts`,
                 '.tsx',
-                '.ts',
-                '.web.jsx',
-                '.web.js',
                 '.jsx',
+                '.ts',
                 '.js',
             ],
+            // mainFields: ['browser', 'react-native', 'main'],
         },
 
         devServer: {
@@ -112,8 +108,6 @@ if(targetPlatform === "web") {
 
     /* HMR only available for development builds. */
     devServer.hmr = mode === "development" ? devServer.hmr : false;
-
-    console.error(devServer);
 
     /**
      * Webpack configuration.

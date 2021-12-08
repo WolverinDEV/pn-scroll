@@ -3,6 +3,7 @@ import {ImplHttpRequestParameters, ImplHttpResponse} from "./index";
 import {BufferInputStream, BufferOutputStream} from "../Buffer";
 import {AppSettings, Setting} from "../../Settings";
 import {Platform} from "react-native";
+import {extractErrorMessage} from "../../utils";
 
 let targetUrl: string;
 let socket: WebSocket | undefined;
@@ -155,12 +156,17 @@ function executeDisconnect(code?: number, reason?: string) {
 
 function executeConnect() {
     executeDisconnect(3001, "starting new connection");
-    let localSocket = new WebSocket(targetUrl);
-    localSocket.onopen = () => handleSocketConnected(localSocket);
-    localSocket.onmessage = event => handleSocketMessage(localSocket, event.data);
-    localSocket.onerror = event => handleSocketError(localSocket, event);
-    localSocket.onclose = event => handleSocketDisconnected(localSocket, event);
-    socket = localSocket;
+    try {
+        let localSocket = new WebSocket(targetUrl);
+        localSocket.onopen = () => handleSocketConnected(localSocket);
+        localSocket.onmessage = event => handleSocketMessage(localSocket, event.data);
+        localSocket.onerror = event => handleSocketError(localSocket, event);
+        localSocket.onclose = event => handleSocketDisconnected(localSocket, event);
+        socket = localSocket;
+    } catch (error) {
+        console.error("Failed to start new web socket connection to %s: %s", targetUrl, extractErrorMessage(error));
+        socket = undefined;
+    }
 }
 
 function handleSocketConnected(eventSocket: WebSocket) {

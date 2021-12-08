@@ -1,8 +1,10 @@
 import React from "react";
-import {StyleSheet, TouchableHighlight, View} from "react-native";
+import {StyleSheet, TouchableHighlight, View, Text} from "react-native";
 import Icon from "react-native-vector-icons/FontAwesome";
 import {toggleSideBar} from "./SideBar";
+import {Portal, PortalHost} from "@gorhom/portal";
 
+const kTopBarPortalId = "top-bar";
 const MenuButton = React.memo(() => {
 
     return (
@@ -20,7 +22,16 @@ export const TopBar = React.memo(() => {
     return (
         <View style={style.container}>
             <MenuButton />
+            <PortalHost name={kTopBarPortalId} />
         </View>
+    );
+});
+
+export const TopBarHeader = React.memo((props: { children: React.ReactChild }) => {
+    return (
+        <Portal hostName={kTopBarPortalId}>
+            {props.children}
+        </Portal>
     );
 });
 
@@ -34,7 +45,9 @@ const style = StyleSheet.create({
         flexDirection: "row",
 
         paddingLeft: 10,
-        paddingRight: 10
+        paddingRight: 10,
+
+        zIndex: 10
     },
     menuButton: {
         padding: 5,

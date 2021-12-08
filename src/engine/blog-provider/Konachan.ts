@@ -1,4 +1,4 @@
-import {BlogProvider, FeedFilter, FeedPost, FeedProvider, ImageLoadResult, PostImageInfo} from "../index";
+import {BlogProvider, FeedFilter, FeedEntry, FeedProvider, SuggestionResult, PostImage} from "../index";
 import {executeRequest} from "../request";
 import {ensurePageLoaderSuccess} from "./Helper";
 import {HTMLElement} from "node-html-parser";
@@ -14,6 +14,20 @@ import {
 import {MemoryCacheResolver} from "../cache/CacheResolver";
 import {extractErrorMessage} from "../../utils";
 import {downloadImage} from "../request/Image";
+import "./KonachenTagGenerator";
+import ImageInfo = PostImage.ImageInfo;
+const knownTags = import("./KonachenTags.json").then(result => {
+    return result.default as KnownTag[];
+}).catch(error => {
+    console.warn("Failed to load Konachen tags: %o", error);
+    return null;
+});
+
+type KnownTag = {
+    postCount: number,
+    name: string,
+    type: string
+}
 
 type KonachenPage = {
     navigator: {
@@ -21,15 +35,11 @@ type KonachenPage = {
         max: number | null,
     },
 
-    posts: FeedPost[],
+    posts: FeedEntry[],
 };
 
-export function downloadKonachenImage(url: string): Promise<ImageLoadResult> {
-    return downloadImage(url, { });
-}
-
 class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
-    constructor(readonly url: string) { }
+    constructor(readonly url: string, readonly filter: FeedFilter) { }
 
     cached(key: CacheKey<number>): boolean { return false; }
     delete(key: CacheKey<number>): void { }
@@ -76,8 +86,8 @@ class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
         {
             const posts = container.querySelectorAll("#post-list-posts li");
             for(const postNode of posts) {
-                let previewImage: PostImageInfo;
-                let detailedImage: PostImageInfo;
+                let previewImage: ImageInfo;
+                let detailedImage: ImageInfo;
                 let postUrl: string;
 
                 {
@@ -101,7 +111,6 @@ class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
 
                         width: parseInt(thumbnailImageNode.getAttribute("width") || ""),
                         height: parseInt(thumbnailImageNode.getAttribute("height") || ""),
-                        loadImage: () => downloadKonachenImage(imageUrl)
                     }
                 }
 
@@ -127,12 +136,12 @@ class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
 
                         width: width,
                         height: height,
-                        loadImage: () => downloadKonachenImage(imageUrl)
                     }
                 }
 
                 result.posts.push({
                     type: "image",
+                    id: detailedImage.identifier,
                     images: [{
                         detailed: detailedImage,
                         preview: previewImage,
@@ -153,7 +162,7 @@ class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
             type: "GET",
             url: `https://${this.url}/post`,
             urlParameters: {
-                tags: "bondage",
+                tags: (this.filter.includeCategories || []).join("+"),
                 page: key.key
             },
             responseType: "html"
@@ -181,32 +190,21 @@ class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
 }
 
 class KonachenFeedProvider implements FeedProvider {
-    private static kPostsPerSite = 18;
-    private pageLoader: ItemCache<number, KonachenPage>;
+    private readonly pageLoader: ItemCache<number, KonachenPage>;
 
     constructor(readonly url: string, readonly filter: FeedFilter) {
         this.pageLoader =  createItemCache<number, KonachenPage>(
             page => page.toString(),
             [
                 new MemoryCacheResolver(),
-                new KonachenPageLoader(url)
+                new KonachenPageLoader(url, filter)
             ]
         );
     }
 
-    randomAccessSupported(target: "page" | "entry"): boolean {
+    randomAccessSupported(_target: "page" | "entry"): boolean {
         /* page and entry are both supported */
         return true;
-    }
-
-    async getEntryCount(): Promise<number> {
-        const firstPage = await ensurePageLoaderSuccess(this.pageLoader, 1);
-        if(typeof firstPage.navigator.max !== "number") {
-            throw "first page misses page count";
-        }
-
-        const lastPage = await ensurePageLoaderSuccess(this.pageLoader, firstPage.navigator.max);
-        return (firstPage.navigator.max - 1) * KonachenFeedProvider.kPostsPerSite + lastPage.posts.length;
     }
 
     async getPageCount(): Promise<number> {
@@ -218,15 +216,7 @@ class KonachenFeedProvider implements FeedProvider {
         return firstPage.navigator.max;
     }
 
-    async loadEntry(target: number): Promise<FeedPost> {
-        return { type: "error", errorType: "not-found" };
-    }
-
-    async loadEntryRef(target: any): Promise<FeedPost> {
-        return { type: "error", errorType: "not-found" };
-    }
-
-    async loadPage(target: number): Promise<FeedPost[]> {
+    async loadPage(target: number): Promise<FeedEntry[]> {
         const page = await ensurePageLoaderSuccess(this.pageLoader, target);
         return page.posts;
     }
@@ -253,6 +243,37 @@ export class KonachenBlogProvider implements BlogProvider {
 
     mainFeed(): FeedProvider {
         return new KonachenFeedProvider(this.url(), { });
+    }
+
+    async queryTagSuggestions(text: string, abortSignal: AbortSignal): Promise<SuggestionResult> {
+        let tags = await knownTags;
+        if(!tags?.length) {
+            return { status: "error", message: "failed to load tags" };
+        } else if(abortSignal.aborted) {
+            return { status: "aborted" };
+        }
+
+        const suggestions = [];
+        for(const { name } of tags) {
+            if(!name.substring(2).toLowerCase().startsWith(text.toLowerCase())) {
+                continue;
+            }
+
+            suggestions.push(name.substring(2));
+            if(suggestions.length > 100) {
+                break;
+            }
+        }
+
+        return {
+            status: "success",
+            suggestions: suggestions
+        };
+    }
+
+    loadImage(image: PostImage.ImageInfo): Promise<PostImage.ImageLoadResult> {
+        /* downloadImage will cache the images. */
+        return downloadImage(image.identifier, { });
     }
 
     private url() {

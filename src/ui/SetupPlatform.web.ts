@@ -1,5 +1,6 @@
 import iconFont from 'react-native-vector-icons/Fonts/FontAwesome.ttf';
 import {setupLocalProxyClient} from "../engine/request/LocalProxyClient";
+import {extractErrorMessage} from "../utils";
 function setupCustomCss() {
     const cssLines = [];
     cssLines.push(
@@ -34,7 +35,12 @@ export async function setupPlatformFunctions() {
     console.info("Web setup!");
 
     setupCustomCss();
-    await setupLocalProxyClient();
+    try {
+        await setupLocalProxyClient();
+    } catch (error) {
+        /* TODO: Better handling of a disconnected proxy client! */
+        console.error("Failed to setup proxy client: %s", extractErrorMessage(error));
+    }
 }
 
 export { BrowserRouter as PlatformRouter } from "react-router-dom";

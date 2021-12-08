@@ -86,10 +86,11 @@ export async function executeRequest<R extends keyof HttpResponseType>(
     };
 
     implRequest.url = request.url;
+
     if(request.urlParameters) {
         implRequest.url += "?";
         implRequest.url += Object.keys(request.urlParameters).map(key => (
-            `${key}=${encodeURIComponent(request.urlParameters![key])}`
+            `${key}=${request.urlParameters![key].toString()}`
         )).join("&");
     }
 
