@@ -1,4 +1,4 @@
-import {BlogProvider, FeedFilter, FeedEntry, FeedProvider, SuggestionResult, PostImage} from "../index";
+import {BlogProvider, FeedFilter, FeedEntry, FeedProvider, SuggestionResult, PostImage, SearchHint} from "../index";
 import {executeRequest} from "../request";
 import {ensurePageLoaderSuccess} from "./Helper";
 import {HTMLElement} from "node-html-parser";
@@ -16,12 +16,21 @@ import {extractErrorMessage} from "../../utils";
 import {downloadImage} from "../request/Image";
 import "./KonachenTagGenerator";
 import ImageInfo = PostImage.ImageInfo;
-const knownTags = import("./KonachenTags.json").then(result => {
-    return result.default as KnownTag[];
-}).catch(error => {
-    console.warn("Failed to load Konachen tags: %o", error);
-    return null;
-});
+import {SearchParseResult} from "../Search";
+
+const knownTagMap: { [key: string]: boolean } = {};
+const knownTags = import("./KonachenTags.json")
+    .then(result => result.default as KnownTag[])
+    .then(result => {
+        for(const { name } of result) {
+            knownTagMap[name.substring(2)] = true;
+        }
+        return result;
+    })
+    .catch(error => {
+        console.warn("Failed to load Konachen tags: %o", error);
+        return null;
+    });
 
 type KnownTag = {
     postCount: number,
@@ -62,16 +71,28 @@ class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
             posts: []
         };
 
+        const nobodyButChickens = container.getElementsByTagName("p")
+            .map(p => p.textContent.toLowerCase())
+            .findIndex(p => p.indexOf("chickens") >= 0 && p.indexOf("nobody") >= 0) >= 0;
+
         /* extract the page count */
-        {
+        paginator: {
             const paginator = container.querySelector("#paginator");
             if(!paginator) {
-                throw new Error("missing #paginator");
+                if(!nobodyButChickens) {
+                    throw new Error("missing #paginator");
+                }
+
+                break paginator;
             }
 
             const em = paginator.querySelector("em");
             if(!em) {
-                throw new Error("missing current page highlight");
+                if(!nobodyButChickens) {
+                    throw new Error("missing current page highlight");
+                }
+
+                break paginator;
             }
 
             const anchors = [...paginator.querySelectorAll("a")]
@@ -83,7 +104,7 @@ class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
         }
 
         /* extract the post entries */
-        {
+        if(!nobodyButChickens) {
             const posts = container.querySelectorAll("#post-list-posts li");
             for(const postNode of posts) {
                 let previewImage: ImageInfo;
@@ -269,6 +290,33 @@ export class KonachenBlogProvider implements BlogProvider {
             status: "success",
             suggestions: suggestions
         };
+    }
+
+    async analyzeSearch(search: SearchParseResult, abortSignal: AbortSignal): Promise<SearchHint[]> {
+        const hints: SearchHint[] = [];
+
+        if(search.query && search.query.value.length > 0) {
+            hints.push({
+                type: "warning",
+                message: "Free text queries are not supported and will be handled as tags."
+            });
+        }
+
+        let tags = await knownTags;
+        if(tags?.length) {
+            for(const { value: tag } of [...search.includeTags, ...search.excludeTags]) {
+                if(tag in knownTagMap) {
+                    continue;
+                }
+
+                hints.push({
+                    type: "warning",
+                    message: "Unknown tag " + tag
+                });
+            }
+        }
+
+        return hints;
     }
 
     loadImage(image: PostImage.ImageInfo): Promise<PostImage.ImageLoadResult> {

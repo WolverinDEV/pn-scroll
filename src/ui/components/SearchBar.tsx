@@ -1,191 +1,24 @@
 import React, {ForwardedRef, MutableRefObject, RefObject, useEffect, useRef, useState} from "react";
-import {BlogProvider, SuggestionResult} from "../../engine";
-import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TextInputProps,
-    View
-} from "react-native";
+import {BlogProvider, SearchHint, SuggestionResult} from "../../engine";
+import {ScrollView, StyleSheet, Text, TextInput, TextInputProps, View} from "react-native";
 import {useObjectReducer} from "../hooks/ObjectReducer";
 import {useHistory} from "react-router-native";
-
-/*
- * Search syntax:
- * include-tag: <tag>
- * skip-tag: <tag>
- * <normal query>
- */
-
-type RefString = {
-    value: string,
-    begin: number,
-    end: number
-}
-
-type SearchParseResult = {
-    status: "success",
-    includeTags: RefString[],
-    excludeTags: RefString[],
-    query: RefString | null,
-};
+import {parseSearchText, SearchParseResult} from "../../engine/Search";
+import {original} from "@reduxjs/toolkit";
 
 type SearchBarState = {
     text: string,
     textCursor: number,
 
-    abortController: AbortController | null,
-
     parseState: SearchParseResult | null,
 
-    currentSuggestion: string | null,
-    currentSuggestions: SuggestionResult | { status: "loading" | "unset" },
+    suggestionsOpen: boolean,
+    suggestionSelected: string | null,
+    suggestionsAbortController: AbortController | null,
+    suggestionsAvailable: SuggestionResult | { status: "loading" | "unset" },
 
-    lastSuggestions: string[] | null,
-}
-
-const debugSearchText = (text: string, knownTags: string[]) => {
-    console.info({
-        text,
-        knownTags,
-        result: parseSearchText(text, knownTags)
-    });
-}
-
-/* tag:bondage Rope { knownTags: [] } -> tag: [bondage] query: Rope */
-/* tag:home porn Nova { knownTags: [home porn] } -> tag:[home porn] query: Nova */
-/* tag:home porn Nova { knownTags: [] } -> tag:[home] query: porn Nova */
-/* tag:home porn tag:test Nova { knownTags: [] } -> tag:[home porn, test] query: Nova */
-debugSearchText("tag:bondage Rope", []);
-debugSearchText("tag:home porn Nova", ["home porn"]);
-debugSearchText("tag:home porn Nova", []);
-debugSearchText("tag:home porn tag:test Nova", []);
-
-export function parseSearchText(text: string, knownTags: string[]): SearchParseResult {
-    const keyMap: {
-        [key: string] : (key: RefString, value: RefString, closed: boolean) => number | void,
-    } = {};
-
-    const includeTags: RefString[] = [];
-    const excludeTags: RefString[] = [];
-    let query: RefString | null = null;
-
-    keyMap["tag"] = (key, value, closed) => {
-        const exclude = key.value === "tag-exclude" || key.value === "!tag";
-
-        const parts = value.value.split(" ");
-        if(closed || parts.length === 1) {
-            /* it's pretty simple since we know the boundaries */
-            (exclude ? excludeTags : includeTags).push(value);
-            return;
-        }
-
-        let tag = "";
-        let verifiedTag: string | null = null;
-        for(const part of parts) {
-            if(tag.length === 0) {
-                tag = part;
-            } else {
-                tag += " " + part;
-            }
-
-            let lowerTag = tag.toLowerCase();
-            for(const knownTag of knownTags) {
-                if(knownTag.toLowerCase().startsWith(lowerTag)) {
-                    verifiedTag = tag;
-                    break;
-                }
-            }
-        }
-
-        if(!verifiedTag) {
-            /* We have to guess that only the first word is the tag. */
-            verifiedTag = parts[0];
-        }
-
-        (exclude ? excludeTags : includeTags).push({
-            begin: value.begin,
-            end: value.begin + verifiedTag.length,
-            value: verifiedTag
-        });
-
-        /* process everything after the space of the known tag */
-        return verifiedTag.length + 1;
-    }
-    keyMap["tag-include"] = keyMap["tag"];
-
-    keyMap["!tag"] = keyMap["tag"];
-    keyMap["tag-exclude"] = keyMap["tag"];
-
-    let textOffset = 0;
-    outerLoop:
-    while(text.length) {
-        for(const keyWord of Object.keys(keyMap)) {
-            if(text.startsWith(keyWord + ":")) {
-                const key: RefString = {
-                    begin: textOffset,
-                    end: textOffset + keyWord.length,
-                    value: keyWord
-                };
-                textOffset += keyWord.length + 1;
-
-                const value: RefString = {
-                    begin: textOffset,
-                    end: -1,
-                    value: text.substring(keyWord.length + 1)
-                };
-
-                for(const keyWord of Object.keys(keyMap)) {
-                    const index = value.value.indexOf(" " + keyWord + ":");
-                    if(index === -1) {
-                        continue;
-                    }
-
-                    if(value.end === -1 || value.end > index) {
-                        value.end = index;
-                    }
-                }
-
-                const closed = value.end !== -1;
-                if(closed) {
-                    /* we will have a leading space */
-                    text = value.value.substring(value.end + 1);
-                    textOffset += value.end + 1;
-
-                    value.value = value.value.substring(0, value.end);
-                } else {
-                    value.end = textOffset + value.value.length;
-                    textOffset = value.end;
-                    text = "";
-                }
-
-
-                const unusedIndex = keyMap[keyWord](key, value, closed);
-                if(typeof unusedIndex === "number" && unusedIndex >= 0) {
-                    const unusedText = value.value.substring(unusedIndex);
-                    text = unusedText + text;
-                    textOffset -= unusedText.length;
-                }
-
-                continue outerLoop;
-            }
-        }
-
-        query = {
-            begin: textOffset,
-            end: text.length + textOffset,
-            value: text
-        }
-        break;
-    }
-
-    return {
-        status: "success",
-        includeTags,
-        excludeTags,
-        query
-    };
+    searchHintsAbort: AbortController | null,
+    searchHints: SearchHint[],
 }
 
 type SelectionState = {
@@ -263,12 +96,15 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
         text: "",
         textCursor: 0,
 
-        abortController: null,
+        suggestionsAbortController: null,
         parseState: null,
 
-        currentSuggestion: null,
-        currentSuggestions: { status: "unset" },
-        lastSuggestions: null
+        searchHintsAbort: null,
+        searchHints: [],
+
+        suggestionSelected: null,
+        suggestionsAvailable: { status: "unset" },
+        suggestionsOpen: false,
     }, { immer: true })({
         setText: (draft, { text, cursor, showSuggestions }: { text: string, cursor: number, showSuggestions: boolean }) => {
             if(draft.text === text) {
@@ -302,29 +138,46 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                 dispatch("loadSuggestions", editingValue);
             }
 
+            dispatch("loadSearchHints");
             console.info("Parse result: %o", draft.parseState);
         },
+        loadSearchHints: draft => {
+            draft.searchHintsAbort?.abort();
+            draft.searchHintsAbort = null;
+            if(!draft.parseState) {
+                return;
+            }
+
+            const abortController = draft.searchHintsAbort = new AbortController();
+            props.blog.analyzeSearch(original(draft.parseState)!, abortController.signal).then(result => {
+                if(abortController.signal.aborted) {
+                    return;
+                }
+
+                dispatch("handleSearchHints", result);
+            });
+        },
+        handleSearchHints: (draft, payload: SearchHint[]) => {
+            draft.suggestionsAbortController = null;
+            draft.searchHints = payload;
+        },
         loadSuggestions: (draft, prefix: string | null) => {
-            draft.abortController?.abort();
-            draft.abortController = null;
+            draft.suggestionsAbortController?.abort();
+            draft.suggestionsAbortController = null;
 
             if(prefix?.startsWith("!")) {
                 prefix = prefix?.substring(1);
             }
 
             if(!prefix) {
-                draft.lastSuggestions = null;
-                draft.currentSuggestion = null;
-                draft.currentSuggestions = { status: "unset" };
+                draft.suggestionSelected = null;
+                draft.suggestionsOpen = false;
+                draft.suggestionsAvailable = { status: "unset" };
                 return;
             }
 
-            if(draft.currentSuggestions.status === "success") {
-                draft.lastSuggestions = draft.currentSuggestions.suggestions;
-            }
-
-            draft.currentSuggestions = { status: "loading" };
-            const abortController = draft.abortController = new AbortController();
+            draft.suggestionsAvailable = { status: "loading" };
+            const abortController = draft.suggestionsAbortController = new AbortController();
             props.blog.queryTagSuggestions(prefix, abortController.signal).then(result => {
                 if(abortController.signal.aborted) {
                     return;
@@ -334,27 +187,33 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             });
         },
         handleSuggestions: (draft, payload: SuggestionResult) => {
-            draft.abortController = null;
-            draft.currentSuggestions = payload;
+            draft.suggestionsAbortController = null;
+            draft.suggestionsAvailable = payload;
 
-            console.info("Suggestion for %s: %o", draft.text, payload);
+            /* Show errors and suggestions only. */
+            if(payload.status === "success" && payload.suggestions.length > 0) {
+                draft.suggestionsOpen = true;
+            } else if(payload.status === "error") {
+                draft.suggestionsOpen = true;
+            }
+            console.info("Suggestion for %s: %o. Visible: %o", draft.text, payload, draft.suggestionsOpen);
         },
         selectNextSuggestion: (draft, direction: number) => {
-            if(draft.currentSuggestions.status !== "success") {
+            if(draft.suggestionsAvailable.status !== "success") {
                 return;
             }
 
-            const suggestions = draft.currentSuggestions.suggestions;
-            let index = suggestions.indexOf(draft.currentSuggestion as string) + direction;
+            const suggestions = draft.suggestionsAvailable.suggestions;
+            let index = suggestions.indexOf(draft.suggestionSelected as string) + direction;
             if(index >= suggestions.length) {
                 index = suggestions.length - 1;
             }
 
-            draft.currentSuggestion = draft.currentSuggestions.suggestions[index] || null;
-            console.error("Select %d %s", index, draft.currentSuggestion);
+            draft.suggestionSelected = draft.suggestionsAvailable.suggestions[index] || null;
+            console.error("Select %d %s", index, draft.suggestionSelected);
         },
         submitSuggestion: draft => {
-            if(!draft.currentSuggestion || !draft.parseState) {
+            if(!draft.suggestionSelected || !draft.parseState) {
                 return;
             }
 
@@ -390,11 +249,11 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             let newText: string;
             if(refSelection.current) {
                 /* fixup selection */
-                refSelection.current.start = editingValue.begin + draft.currentSuggestion.length + suggestionPrefix.length;
+                refSelection.current.start = editingValue.begin + draft.suggestionSelected.length + suggestionPrefix.length;
                 refSelection.current.end = refSelection.current.start;
             }
 
-            newText = draft.text.substring(0, editingValue.begin) + suggestionPrefix + draft.currentSuggestion + draft.text.substring(editingValue.end);
+            newText = draft.text.substring(0, editingValue.begin) + suggestionPrefix + draft.suggestionSelected + draft.text.substring(editingValue.end);
 
             dispatch("setText", { text: newText, cursor: refSelection.current?.start || 0, showSuggestions: false });
             dispatch("loadSuggestions", null);
@@ -414,8 +273,10 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
         if(props.initialQuery) {
             dispatch("setText", { text: props.initialQuery, cursor: props.initialQuery.length, showSuggestions: false });
         }
+
         return () => {
-            state.abortController?.abort();
+            state.suggestionsAbortController?.abort();
+            state.searchHintsAbort?.abort();
             /* No need for further cleanup since we're never using the state again. */
         }
     }, []);
@@ -450,7 +311,7 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                                 break;
 
                             case "Tab":
-                                if(state.currentSuggestion) {
+                                if(state.suggestionSelected) {
                                     event.preventDefault();
                                 }
 
@@ -463,8 +324,22 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                         }
                     }}
                 />
-                <SuggestionProvider status={state.currentSuggestions} selectedSuggestion={state.currentSuggestion} />
+                {state.suggestionsOpen && <SuggestionProvider key={"suggestions"} status={state.suggestionsAvailable} selectedSuggestion={state.suggestionSelected} />}
+                <HintProvider hints={state.searchHints} />
             </View>
+        </View>
+    );
+});
+
+const HintProvider = React.memo(({ hints }: { hints: SearchHint[] }) => {
+    const [hint] = hints;
+    if (!hint) {
+        return null;
+    }
+
+    return (
+        <View style={styleHints.container}>
+            <Text style={[styleHints.text, hint.type === "warning" ? styleHints.textWarning : styleHints.textError]}>{hint.message}</Text>
         </View>
     );
 });
@@ -494,7 +369,7 @@ const SuggestionProvider = React.memo((props: { status: SuggestionResult | { sta
             }
 
             body = props.status.suggestions.map(suggestion => (
-                <Text key={suggestion} style={[style.suggestion, suggestion === props.selectedSuggestion && style.suggestionSelected]}>{suggestion}</Text>
+                <Text key={suggestion} style={[styleSuggestions.suggestion, suggestion === props.selectedSuggestion && styleSuggestions.suggestionSelected]}>{suggestion}</Text>
             ));
             break;
 
@@ -505,11 +380,59 @@ const SuggestionProvider = React.memo((props: { status: SuggestionResult | { sta
     }
 
     return (
-        <ScrollView style={style.suggestionContainer}>
+        <ScrollView style={styleSuggestions.suggestionContainer}>
             {body}
         </ScrollView>
     )
+});
+
+const styleHints = StyleSheet.create({
+    container: {
+        position: "absolute",
+        top: "100%",
+        left: 0,
+        right: 0,
+
+        display: "flex",
+        flexDirection: "row",
+    },
+    text: {
+        color: "red",
+        fontSize: 10,
+    },
+    textWarning: {
+        color: "#e8c930"
+    },
+    textError: {
+        color: "#e83030"
+    }
 })
+
+const styleSuggestions = StyleSheet.create({
+    suggestionContainer: {
+        position: "absolute",
+        top: "100%",
+        left: 0,
+        right: 0,
+
+        display: "flex",
+        flexDirection: "column",
+
+        backgroundColor: "#fff",
+        padding: 5,
+
+        minHeight: 100,
+        maxHeight: 400,
+
+        zIndex: 10
+    },
+    suggestion: {
+        color: "black"
+    },
+    suggestionSelected: {
+        color: "red",
+    },
+});
 
 const style = StyleSheet.create({
     container: {
@@ -538,27 +461,4 @@ const style = StyleSheet.create({
 
         padding: 6
     },
-
-    suggestionContainer: {
-        position: "absolute",
-        top: "100%",
-        left: 0,
-        right: 0,
-
-        display: "flex",
-        flexDirection: "column",
-
-        backgroundColor: "#fff",
-        padding: 5,
-
-        minHeight: 100,
-        maxHeight: 400,
-    },
-
-    suggestion: {
-        color: "black"
-    },
-    suggestionSelected: {
-        color: "red",
-    }
 });

@@ -1,4 +1,5 @@
 import "./blog-provider/Konachan.ts";
+import {SearchParseResult} from "./Search";
 
 export namespace PostImage {
     export type ImageLoadResult = {
@@ -84,6 +85,11 @@ export interface FeedProvider {
     getPageCount() : Promise<number>;
 }
 
+export type SearchHint = {
+    type: "error" | "warning",
+    message: string
+};
+
 export interface BlogProvider {
     /* FIXME: id() might be miss leading since the BlogRegistry uses different ids */
     id() : string;
@@ -99,6 +105,8 @@ export interface BlogProvider {
      * @param abortSignal A signal to abort the query
      */
     queryTagSuggestions(text: string, abortSignal: AbortSignal) : Promise<SuggestionResult>;
+
+    analyzeSearch(search: SearchParseResult, abortSignal: AbortSignal) : Promise<SearchHint[]>;
 
     /**
      * Load/download an image in order to display it.

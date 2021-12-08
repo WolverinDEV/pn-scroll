@@ -2,7 +2,30 @@ import {CacheKey, ItemCacheResolver, kResolveResultMiss, ResolveOptions, Resolve
 import {extractErrorMessage} from "../../utils";
 
 export class MemoryCacheResolver<K, V> implements ItemCacheResolver<K, V> {
+    private readonly timeout?: number;
+    private timeoutInterval?: any;
+    private cacheTimestamps: { [key: string]: number } = {};
     private cache: { [key: string]: V } = {};
+
+    constructor(timeout?: number) {
+        this.timeout = timeout;
+        if(this.timeout) {
+            this.timeoutInterval = setInterval(() => {
+                const timeoutTimestamp = Date.now() - this.timeout!;
+                for(const key of Object.keys(this.cacheTimestamps)) {
+                    if(this.cacheTimestamps[key] < timeoutTimestamp) {
+                        delete this.cacheTimestamps[key];
+                        delete this.cache[key];
+                    }
+                }
+            }, timeout);
+        }
+    }
+
+    destroy() {
+        clearInterval(this.timeoutInterval);
+        this.timeoutInterval = undefined;
+    }
 
     name(): string {
         return "memory";
@@ -17,6 +40,7 @@ export class MemoryCacheResolver<K, V> implements ItemCacheResolver<K, V> {
     }
 
     delete(key: CacheKey<K>): void {
+        delete this.cacheTimestamps[key.cacheKey];
         delete this.cache[key.cacheKey];
     }
 
@@ -26,6 +50,7 @@ export class MemoryCacheResolver<K, V> implements ItemCacheResolver<K, V> {
         }
 
         if(key.cacheKey in this.cache) {
+            this.cacheTimestamps[key.cacheKey] = Date.now();
             return { status: "cache-hit", value: this.cache[key.cacheKey] };
         }
 
@@ -33,6 +58,7 @@ export class MemoryCacheResolver<K, V> implements ItemCacheResolver<K, V> {
     }
 
     save(key: CacheKey<K>, value: V): void {
+        this.cacheTimestamps[key.cacheKey] = Date.now();
         this.cache[key.cacheKey] = value;
     }
 }

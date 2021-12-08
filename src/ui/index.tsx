@@ -12,7 +12,7 @@ import {executeLoading} from "../AppLoader";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {MainPage} from "./pages/Main";
 import {BlogProvider, FeedProvider} from "../engine";
-import {parseSearchText} from "./components/SearchBar";
+import {parseSearchText} from "../engine/Search";
 
 type BlogContextInfo = {
     status: "set",

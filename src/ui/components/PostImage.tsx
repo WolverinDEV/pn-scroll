@@ -9,11 +9,8 @@ import ImageInfo = PostImage.ImageInfo;
 const imageCache = createItemCache<{ info: ImageInfo, blog: BlogProvider }, ImageLoadResult>(
     key => key.info.identifier,
     [
-        /*
-         * FIXME: Cache timeout 60 seconds or something.
-         *        We only use this right now to improve scrolling.
-         */
-        new MemoryCacheResolver(),
+        /* We only use the mem cache so we don't have to load the image from a file or something. */
+        new MemoryCacheResolver(60),
         async key => {
             return {
                 status: "cache-hit",

@@ -3,7 +3,7 @@ import {
     FeedFilter,
     FeedEntry,
     FeedProvider,
-    PostImage, SuggestionResult,
+    PostImage, SuggestionResult, SearchHint,
 } from "../index";
 import {ensurePageLoaderSuccess} from "./Helper";
 import {executeRequest} from "../request";
@@ -20,6 +20,7 @@ import {extractErrorMessage} from "../../utils";
 import {MemoryCacheResolver} from "../cache/CacheResolver";
 import {downloadImage} from "../request/Image";
 import "./ThatPervertTagGenerator";
+import {SearchParseResult} from "../Search";
 const knownTags = import("./ThatPervertTags.json");
 knownTags.then(result => {
     console.info("Known tags: %o", result.length);
@@ -258,6 +259,21 @@ export class ThatPervertBlogProvider implements BlogProvider {
 
     async queryTagSuggestions(text: string, abortSignal: AbortSignal): Promise<SuggestionResult> {
         return { status: "error", message: "not implemented" };
+    }
+
+    async analyzeSearch(search: SearchParseResult, abortSignal: AbortSignal): Promise<SearchHint[]> {
+        const hints: SearchHint[] = [];
+
+        if(search.query && search.query.value.length > 0) {
+            if(search.includeTags.length > 0) {
+                hints.push({
+                    type: "warning",
+                    message: "Combining search text with tags is not recommended and leads to truncated results."
+                });
+            }
+        }
+
+        return hints;
     }
 
     loadImage(image: PostImage.ImageInfo): Promise<PostImage.ImageLoadResult> {

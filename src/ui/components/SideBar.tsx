@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useState} from "react";
 import {
     StyleSheet,
     TouchableWithoutFeedback,
@@ -6,15 +6,15 @@ import {
     Animated,
     Text,
     TouchableNativeFeedback,
-    Platform, TouchableHighlight, TouchableOpacity
+    Platform, TouchableHighlight
 } from "react-native";
 import {Easing} from "../Animations";
 import {AppStore, useAppSelector} from "../../AppState";
 import {createSlice, PayloadAction} from "@reduxjs/toolkit";
 import {useAnimation} from "../hooks/UseAnimation";
 import {HoverAnimatedView} from "./Hoverable";
-import Icon from "react-native-vector-icons/FontAwesome";
 import {useHistory} from "react-router-native";
+import Icon from "react-native-vector-icons/FontAwesome";
 
 type SidebarState = {
     visible: boolean
