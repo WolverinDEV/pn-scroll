@@ -4,7 +4,7 @@ import {ActiveBlogs} from "../engine/Blogs";
 import {View, Text} from "react-native";
 import {SideBar} from "./components/SideBar";
 import {TopBar} from "./components/TopBar";
-import {FeedView} from "./components/FeedView";
+import {FeedInfo, FeedView} from "./components/FeedView";
 import {Redirect, Route, Switch, useParams, useRouteMatch} from "react-router-native";
 import {UnknownPage} from "./pages/Unknown";
 import {PageSettings} from "./pages/Settings";
@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {MainPage} from "./pages/Main";
 import {BlogProvider, FeedProvider} from "../engine";
 import {parseSearchText} from "../engine/Search";
+import {logComponentRendered} from "../Log";
 
 type BlogContextInfo = {
     status: "set",
@@ -24,18 +25,39 @@ type BlogContextInfo = {
 export const BlogContext = React.createContext<BlogContextInfo>({ status: "unset" });
 
 const BlogView = React.memo(() => {
-    const { id: blogName, query } = useParams<{ id: string, query: string | undefined }>();
+    logComponentRendered("BlogView");
+    const { id: blogName, query, page } = useParams<{ id: string, query: string | undefined, page: string | undefined }>();
 
     /* FIXME: Apply known tags? */
-    const parsedQuery = query ? parseSearchText(query, [ ]) : undefined;
-
-    const feed = useMemo(() => {
-        if(parsedQuery) {
-            return ActiveBlogs[blogName]?.filteredFeed({ includeCategories: parsedQuery.includeTags.map(category => category.value) })
-        } else {
-            return ActiveBlogs[blogName]?.mainFeed();
+    const feed = useMemo<FeedInfo | null>(() => {
+        if(!ActiveBlogs[blogName]) {
+            return null;
         }
-    }, [ blogName, parsedQuery ]);
+
+        const parsedQuery = query ? parseSearchText(query, [ ]) : undefined;
+        if(parsedQuery) {
+            return {
+                blogName,
+                blog: ActiveBlogs[blogName],
+                feed: ActiveBlogs[blogName].filteredFeed({ includeCategories: parsedQuery.includeTags.map(category => category.value) })
+            }
+        } else {
+            return {
+                blogName,
+                blog: ActiveBlogs[blogName],
+                feed: ActiveBlogs[blogName].mainFeed()
+            }
+        }
+    }, [ blogName, query ]);
+
+    const initialPage = useMemo<number | undefined>(() => {
+        if(!page) {
+            return undefined;
+        }
+
+        let initialPage = parseInt(page);
+        return !isNaN(initialPage) ? initialPage : undefined;
+    }, [ feed ]);
 
     return (
         <View style={{
@@ -53,18 +75,15 @@ const BlogView = React.memo(() => {
                 <FeedView
                     key={blogName + "-" + query}
                     initialQuery={query}
-                    feed={{
-                        blog: ActiveBlogs[blogName]!,
-                        blogName: blogName,
-                        feed: feed
-                    }}
+                    feed={feed}
+                    initialPage={initialPage}
                 />
             ) : null}
         </View>
     );
 });
 
-const FeedRoute = () => {
+const FeedRoute = React.memo(() => {
     let { path, url } = useRouteMatch();
     return (
         <Switch>
@@ -75,9 +94,20 @@ const FeedRoute = () => {
             <Redirect to={`${url}/main/`} />
         </Switch>
     )
-}
+});
 
-export const AppView = () => {
+const AppRoutes = React.memo(() => {
+    return (
+        <Switch>
+            <Route path={"/feed/:id"} render={() => <FeedRoute />} />
+            <Route path={"/settings"} render={() => <PageSettings />} />
+            <Route path={"/"} render={() => <MainPage />} />
+            <Route path={"*"} render={() => <UnknownPage />} />
+        </Switch>
+    )
+});
+
+export const AppView = React.memo(() => {
     const loaderState = useAppSelector(state => state.loader.status);
     useEffect(() => {
         if(loaderState === "uninit") {
@@ -92,12 +122,7 @@ export const AppView = () => {
                 <SafeAreaView style={{ height: "100%", width: "100%" }}>
                     <SideBar>
                         <TopBar />
-                        <Switch>
-                            <Route path={"/feed/:id"} render={() => <FeedRoute />} />
-                            <Route path={"/settings"} render={() => <PageSettings />} />
-                            <Route path={"/"} render={() => <MainPage />} />
-                            <Route path={"*"} render={() => <UnknownPage />} />
-                        </Switch>
+                        <AppRoutes />
                     </SideBar>
                 </SafeAreaView>
             );
@@ -109,4 +134,4 @@ export const AppView = () => {
                 <Text>Loading..</Text>
             );
     }
-};
+});

@@ -9,6 +9,7 @@ import "./declarations";
 import {ImageDetailedViewHook} from "./ui/components/ImageDetailedView";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {PortalProvider} from "@gorhom/portal";
+import "./Array";
 
 namespace Colors {
     export const primary = '#1292B4';

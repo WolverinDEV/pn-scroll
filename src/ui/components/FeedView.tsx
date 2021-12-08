@@ -4,24 +4,25 @@ import {
     FeedProvider,
     PostImage,
 } from "../../engine";
-import React, {useCallback, useContext, useEffect, useRef, useState} from "react";
+import React, {useContext, useEffect, useRef, useState} from "react";
 import {
     ActivityIndicator,
     StyleSheet,
     Text, TouchableHighlight, TouchableWithoutFeedback,
     View,
-    ViewabilityConfig,
-    ViewToken,
 } from "react-native";
 import {useObjectReducer} from "../hooks/ObjectReducer";
 import {AppSettings, Setting} from "../../Settings";
 import {PostImageRenderer} from "./PostImage";
 import {SearchBar} from "./SearchBar";
 import {TopBarHeader} from "./TopBar";
-import {useHistory, useParams} from "react-router-native";
+import {useHistory} from "react-router-native";
 import {BidirectionalFlatList} from "./flat-list";
+import {getLogger, logComponentRendered} from "../../Log";
 
-type FeedInfo = {
+const logger = getLogger("feed-view");
+
+export type FeedInfo = {
     feed: FeedProvider,
     blog: BlogProvider,
     blogName: string
@@ -180,7 +181,7 @@ const FeedViewEntryRender = React.memo((props: { item: FeedEntry, visible: boole
                 key={"image-not-expended"}
                 onPress={() => {
                     setExpanded(!expanded);
-                    console.error("XXX");
+                    logger.debug("Expending post.");
                 }}
             >
                 <View style={{
@@ -196,15 +197,17 @@ const FeedViewEntryRender = React.memo((props: { item: FeedEntry, visible: boole
 
 export const FeedView = React.memo((props: {
     feed: FeedInfo,
-    initialQuery?: string
+    initialQuery?: string,
+    initialPage?: number
 }) => {
+    logComponentRendered("FeedView");
     return (
         <FeedInfoContext.Provider value={props.feed}>
             <View style={{ height: "100%", width: "100%" }}>
                 <TopBarHeader>
                     <SearchBar blog={props.feed.blog} blogName={props.feed.blogName} initialQuery={props.initialQuery} />
                 </TopBarHeader>
-                <FeedFlatList />
+                <FeedFlatList initialPage={props.initialPage} />
             </View>
         </FeedInfoContext.Provider>
     );
@@ -225,7 +228,9 @@ type FeedViewState = {
         [K in LoadDirection]: LoadState
     },
 
+    prependedPostCount: number,
     posts: { entry: FeedEntry, page: number }[],
+
     itemHeight: number,
 }
 
@@ -236,11 +241,17 @@ type LoadState = {
     message: string
 };
 
-const FeedFlatList = React.memo(() => {
-    const { feed } = useContext(FeedInfoContext);
+type ViewState = {
+    items: { page: number, index: number }[],
+    currentPage: number,
+    scrolling: boolean,
+    updateTimeout: any
+};
 
+const FeedFlatList = React.memo((props: { initialPage?: number }) => {
+    logComponentRendered("FeedFlatList");
+    const { feed } = useContext(FeedInfoContext);
     const navigator = useHistory();
-    const { page: initialPage } = useParams<{ page?: string }>();
 
     const [ state, dispatch ] = useObjectReducer<FeedViewState>({
         initialized: false,
@@ -252,6 +263,8 @@ const FeedFlatList = React.memo(() => {
         },
 
         posts: [],
+        prependedPostCount: 0,
+
         itemHeight: 300
     }, { immer: true })({
         fetch: (prevState, { direction, force }: { direction: "previous" | "next", force?: boolean }) => {
@@ -272,7 +285,7 @@ const FeedFlatList = React.memo(() => {
                 }
             }
 
-            console.info("fetching for %s at %d-%d", direction, prevState.currentView[0], prevState.currentView[1]);
+            logger.info("fetching for %s at %d-%d", direction, prevState.currentView[0], prevState.currentView[1]);
             let targetPage: number;
             if(direction === "previous") {
                 targetPage = prevState.currentView[0] - 1;
@@ -306,8 +319,11 @@ const FeedFlatList = React.memo(() => {
             draft.loading[direction] = { status: "inactive" };
             const mappedPosts = posts.map(post => ({ entry: post, page: page }));
             if(direction === "previous") {
+                logger.debug("--- Prepending %d items.", mappedPosts.length);
+                draft.prependedPostCount += mappedPosts.length;
                 draft.posts = [...mappedPosts, ...draft.posts];
             } else {
+                logger.debug("--- Appending %d items.", mappedPosts.length);
                 draft.posts = [...draft.posts, ...mappedPosts];
             }
 
@@ -327,22 +343,21 @@ const FeedFlatList = React.memo(() => {
 
             draft.loading[direction] = { status: "inactive" };
             /* TODO: Proper handling */
-            console.warn("Failed to load %s: %o", direction, error);
+            logger.warn("Failed to load %s: %o", direction, error);
         },
         initialize: prevState => {
             if(prevState.initialized) {
                 return;
             }
 
-            let initialPageNumber = parseInt(initialPage || "");
-            if(!isNaN(initialPageNumber)) {
-                prevState.currentView = [ initialPageNumber + 1, initialPageNumber ];
-                console.error("Initial page: %o", initialPageNumber);
+            if(typeof props.initialPage === "number") {
+                prevState.currentView = [ props.initialPage, props.initialPage - 1 ];
+                logger.info("Initial page: %o", props.initialPage);
             } else {
-                prevState.currentView = [ 2, 1 ];
+                prevState.currentView = [ 1, 0 ];
             }
 
-            dispatch("fetch", { direction: "previous", force: false });
+            dispatch("fetch", { direction: "next", force: false });
             prevState.initialized = true;
         },
         setItemHeight: (draft, payload: number) => {
@@ -354,19 +369,93 @@ const FeedFlatList = React.memo(() => {
         dispatch("initialize");
     }
 
+    const refView = useRef<ViewState>({
+        currentPage: 0,
+        items: [],
+        scrolling: false,
+        updateTimeout: 0
+    }).current;
+
+    useEffect(() => () => clearTimeout(refView.updateTimeout), [ ]);
+
+    const scheduleHistoryUpdate = () => {
+        if(refView.scrolling) {
+            /*
+             * We don't want to update the page paths since this will lag the page and
+             * gives the user an odd feeling when scrolling in that moment.
+             */
+            return;
+        }
+
+        clearTimeout(refView.updateTimeout);
+        refView.updateTimeout = setTimeout(() => {
+            const currentPath = navigator.location.pathname.split("/");
+            if(!currentPath.last?.length) {
+                /* in case the path currently ends with a "/" */
+                currentPath.pop();
+            }
+
+            const currentPage = parseInt(currentPath.last!);
+            if(!isNaN(currentPage)) {
+                if(currentPage === refView.currentPage) {
+                    return;
+                }
+
+                /* pop the current page number */
+                currentPath.pop();
+            }
+            currentPath.push(refView.currentPage.toString());
+            navigator.replace(currentPath.join("/"));
+        }, 250);
+    }
+
+    const updateUrlPage = () => {
+        if(refView.items.length === 0) {
+            return;
+        }
+
+        const targetPage = Math.round(
+            refView.items.map(item => item.page).reduce((a, b) => a + b, 0) / refView.items.length
+        );
+
+        if(refView.currentPage === targetPage) {
+            return;
+        }
+
+        refView.currentPage = targetPage;
+        scheduleHistoryUpdate();
+    }
     //ListFooterComponent={state.loading ? FeedLoadingFooter : null}
     return (
         <BidirectionalFlatList
+            prependedItemCount={state.prependedPostCount}
             data={state.posts}
-            renderItem={({ item, index, visible }) => (
-                <FeedViewEntryRender
-                    item={item.entry}
-                    index={index}
-                    itemHeight={state.itemHeight}
-                    visible={visible}
-                />
-            )}
 
+            renderItem={({ item, index, visible }) => {
+                useEffect(() => {
+                    if(!visible) {
+                        return;
+                    }
+
+                    const entry = { index, page: item.page };
+                    refView.items.push(entry);
+                    updateUrlPage();
+                    return () => {
+                        const index = refView.items.indexOf(entry);
+                        refView.items.splice(index, 1);
+                        updateUrlPage();
+                    }
+                }, [ item, visible ]);
+
+                return (
+                    <FeedViewEntryRender
+                        item={item.entry}
+                        index={index}
+                        itemHeight={state.itemHeight}
+                        visible={visible}
+                    />
+                );
+            }}
 
             contentContainerStyle={{
                 padding: 10
@@ -378,29 +467,23 @@ const FeedFlatList = React.memo(() => {
 
             keyExtractor={(item, index) => index.toString()}
 
-            onEndReached={() => { dispatch("fetch", { direction: "next", force: false }); }}
+            onEndReached={() => {
+                dispatch("fetch", { direction: "next", force: false });
+            }}
             onEndReachedThreshold={0.1}
 
-            onStartReached={() => { dispatch("fetch", { direction: "previous", force: false }); }}
+            onStartReached={() => {
+                dispatch("fetch", { direction: "previous", force: false });
+            }}
             onStartReachedThreshold={0.1}
 
-            onViewableItemsChanged={items => {
-                if(items.length === 0) {
-                    return;
+            onScrollToggle={status => {
+                refView.scrolling = status;
+                if(refView.scrolling) {
+                    clearTimeout(refView.updateTimeout);
+                } else {
+                    scheduleHistoryUpdate();
                 }
-
-                const page = Math.round(items.map(item => item.item.page).reduce((previousValue, currentValue) => previousValue + currentValue, 0) / items.length);
-
-                const path = navigator.location.pathname.split("/");
-                if(path[path.length - 1].length === 0) {
-                    path.pop();
-                }
-
-                if(parseInt(path[path.length - 1])) {
-                    path.pop();
-                }
-                path.push(page.toString());
-                navigator.replace(path.join("/"));
             }}
         />
     );

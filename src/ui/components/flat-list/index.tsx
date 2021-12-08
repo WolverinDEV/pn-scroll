@@ -3,9 +3,10 @@ import { Virtuoso } from 'react-virtuoso';
 import React, {useEffect, useRef, useState} from "react";
 import {LayoutRectangle, StyleProp, ViewStyle} from "react-native";
 import { v4 as guuid } from "uuid";
+import {getLogger, logComponentRendered} from "../../../Log";
 
-type ItemRenderer<ItemT> = (props: { item: ItemT, index: number, visible: boolean }) => React.ReactElement;
-type BidirectionalFlatListProperties<ItemT> = {
+export type ItemRenderer<ItemT> = (props: { item: ItemT, index: number, visible: boolean }) => React.ReactElement;
+export type BidirectionalFlatListProperties<ItemT> = {
     data: ReadonlyArray<ItemT>;
     renderItem: ItemRenderer<ItemT>;
     contentContainerStyle?: StyleProp<ViewStyle> | undefined;
@@ -21,9 +22,13 @@ type BidirectionalFlatListProperties<ItemT> = {
     onEndReachedThreshold?: number | null | undefined;
 
     onViewableItemsChanged?: ((viewableItems: Array<{ index: number, item: ItemT }>) => void) | null | undefined;
+    /* Only available for the Web */
+    onScrollToggle?: (isScrolling: boolean) => void;
 
     viewabilityConfig?: any;
     focusable?: boolean | undefined;
+
+    prependedItemCount?: number,
 };
 
 const useItemId = () => {
@@ -40,7 +45,7 @@ const IntersectionObserverInstances: Map<HTMLElement, {
     refCount: number,
     callbacks: IntersectionObserverCallbacks,
 }> = new Map();
-const ItemRenderWrapper = (props: { renderer: ItemRenderer<any>, item: any, index: number}) => {
+const ItemRenderWrapper = React.memo((props: { renderer: ItemRenderer<any>, item: any, index: number }) => {
     const itemId = useItemId();
     const ref = useRef<HTMLDivElement>(null);
     const [ visible, setVisible ] = useState(false);
@@ -69,6 +74,7 @@ const ItemRenderWrapper = (props: { renderer: ItemRenderer<any>, item: any, inde
             instance = {
                 callbacks: callbacks,
                 observer: new IntersectionObserver(entries => {
+                    logger.info("IntersectionObserver triggered for %d entries.", entries.length);
                     for(const entry of entries) {
                         const id = entry.target.getAttribute("x-observe-id") || "";
                         const callback = callbacks[id];
@@ -105,31 +111,28 @@ const ItemRenderWrapper = (props: { renderer: ItemRenderer<any>, item: any, inde
             {children}
         </div>
     )
-};
+});
 
 const kInverseInfinityOffset = 1e11;
 export const BidirectionalFlatList = <ItemT extends unknown>(props: BidirectionalFlatListProperties<ItemT>) => {
+    return (
+        <BidirectionalFlatListAny {...props} />
+    );
+}
+
+const logger = getLogger("bidirectional-flat-list");
+export const BidirectionalFlatListAny = React.memo((props: BidirectionalFlatListProperties<any>) => {
+    logComponentRendered("BidirectionalFlatListAny");
+
     const {
         data,
         renderItem,
         keyExtractor,
         onViewableItemsChanged,
-        onLayout
+        onLayout,
     } = props;
 
     const [ refScroll, setRefScroll ] = useState<HTMLElement | null>(null);
-    const initialFirstItem = useRef<ItemT | null>( null);
-
-    if(initialFirstItem.current === null) {
-        initialFirstItem.current = data[0];
-    }
-
-    let firstItemOffset = data.indexOf(initialFirstItem.current);
-    if(firstItemOffset === -1) {
-        /* Well, something has changed... */
-    }
-    let offset = kInverseInfinityOffset - firstItemOffset;
-    // console.info("Item count: %d, First item index: %d", data.length, firstItemOffset);
 
     useEffect(() => {
         if(!refScroll) {
@@ -152,23 +155,25 @@ export const BidirectionalFlatList = <ItemT extends unknown>(props: Bidirectiona
         return null;
     }
 
+    const prependedItemCount = typeof props.prependedItemCount === "number" ? props.prependedItemCount : 0;
+
     /* Virtuoso lists work from the bottom up */
     return (
-        <Virtuoso<ItemT>
-            firstItemIndex={offset}
+        <Virtuoso
+            firstItemIndex={kInverseInfinityOffset - prependedItemCount}
 
             data={props.data}
             itemContent={(index, data) => (
-                <ItemRenderWrapper index={index} item={data} renderer={renderItem} />
+                <ItemRenderWrapper index={index - kInverseInfinityOffset + prependedItemCount} item={data} renderer={renderItem} />
             )}
 
             endReached={() => {
                 props.onEndReached?.();
-                console.info("endReached");
+                logger.info("endReached");
             }}
             startReached={() => {
                 props.onStartReached?.();
-                console.info("startReached")
+                logger.info("startReached");
             }}
 
             rangeChanged={({ startIndex, endIndex }) => {
@@ -176,13 +181,13 @@ export const BidirectionalFlatList = <ItemT extends unknown>(props: Bidirectiona
                     return;
                 }
 
-                let mappedStartIndex = startIndex - kInverseInfinityOffset + firstItemOffset;
-                let mappedEndIndex = endIndex - kInverseInfinityOffset + firstItemOffset;
-                console.info("Original { start: %d, end: %d }, Mapped: { start: %d, end: %d }, Offset: %d", startIndex, endIndex, mappedStartIndex, mappedEndIndex, firstItemOffset);
+                let mappedStartIndex = startIndex - kInverseInfinityOffset + prependedItemCount;
+                let mappedEndIndex = endIndex - kInverseInfinityOffset + prependedItemCount;
+                logger.info("Original { start: %d, end: %d }, Mapped: { start: %d, end: %d }, Offset: %d", startIndex, endIndex, mappedStartIndex, mappedEndIndex, prependedItemCount);
 
                 /* the range includes all over scan items as well! */
 
-                const visibleItems: { index: number, item: ItemT }[] = [];
+                const visibleItems: { index: number, item: any }[] = [];
                 for(let index = mappedStartIndex; index < mappedEndIndex; index++) {
                     if(index >= data.length || index < 0) {
                         continue;
@@ -193,11 +198,12 @@ export const BidirectionalFlatList = <ItemT extends unknown>(props: Bidirectiona
                         item: data[index]
                     });
                 }
-                onViewableItemsChanged(visibleItems);
+                /* FIXME! */
+                //onViewableItemsChanged(visibleItems);
             }}
             computeItemKey={keyExtractor ? (index, item) => keyExtractor(item, index) : undefined}
 
-            overscan={1000}
+            //increaseViewportBy={3200}
             scrollerRef={ref => {
                 if(!ref) {
                     return;
@@ -212,6 +218,8 @@ export const BidirectionalFlatList = <ItemT extends unknown>(props: Bidirectiona
                     };
                 }
             }}
+
+            isScrolling={props.onScrollToggle}
         />
     );
-}
+})
