@@ -1,5 +1,5 @@
 import iconFont from 'react-native-vector-icons/Fonts/FontAwesome.ttf';
-import {setupLocalProxyClient} from "../engine/request/LocalProxyClient";
+import {setupLocalProxyClient} from "../engine/request/WebProxy";
 import {extractErrorMessage} from "../utils";
 function setupCustomCss() {
     const cssLines = [];

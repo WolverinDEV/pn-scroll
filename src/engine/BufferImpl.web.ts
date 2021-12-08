@@ -1,1 +1,1 @@
-export const TextEncoder = window.TextEncoder;
+export const TextEncoder = self.TextEncoder;
