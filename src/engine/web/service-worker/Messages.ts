@@ -1,27 +1,31 @@
 import {getLogger} from "../../../Log";
 import {extractErrorMessage} from "../../../utils";
-import {ProxyRequestClient} from "./Client";
-import {ImplHttpRequestParameters, ImplHttpResponse} from "../index";
-import {downloadImage} from "./Images";
+import {ProxyRequestClient} from "./ProxyClient";
+import {ImplHttpRequestParameters, ImplHttpResponse} from "../../request";
+import {registeredImages} from "./Worker";
 
-const logger = getLogger("local-proxy-worker");
-
-self.onmessage = event => {
-    const source = event.source;
-    const sendResponse = (message: any) => {
-        if(source) {
-            source.postMessage(message);
-        } else {
-            postMessage(message);
-        }
-    };
-
-    if(typeof event.data !== "object") {
-        logger.warn("Received invalid message payload: %o", event.data);
+const logger = getLogger("message-handler");
+self.addEventListener("message", event => {
+    if(typeof event !== "object") {
         return;
     }
 
-    const { type } = event.data;
+    const { scope, type } = event.data;
+    if(scope !== "web-proxy") {
+        /* message is not for us */
+        return;
+    }
+
+    const source = event.source;
+    const sendResponse = (message: any) => {
+        message = { scope: "web-proxy", ...message };
+        if(source) {
+            source.postMessage(message);
+        } else {
+            self.postMessage(message);
+        }
+    };
+
     if(type === "request") {
         const { request, payload, token } = event.data;
         if(!(request in requestHandler)) {
@@ -38,13 +42,13 @@ self.onmessage = event => {
     } else {
         logger.warn("Invalid message type: %o", type);
     }
-}
+});
 
 const requestHandler: {
     [key: string]: (payload: any) => Promise<any>
 } = {};
 
-let requestClient: ProxyRequestClient | undefined;
+export let requestClient: ProxyRequestClient | undefined;
 
 requestHandler["initialize"] = async () => {
     logger.info("Worker successfully initialized!");
@@ -67,11 +71,9 @@ requestHandler["proxy-request"] = async (request: ImplHttpRequestParameters): Pr
     return await requestClient.execute(request);
 }
 
-requestHandler["download-image"] = async ({ url, headers }) => {
-    const result = await downloadImage(requestClient, url, headers);
-    if(result.status === "success") {
-        // @ts-ignore
-        delete result["unload"];
-    }
-    return result;
+requestHandler["register-image"] = async ({ url, headers }) => {
+    registeredImages[url] = {
+        url,
+        headers
+    };
 }

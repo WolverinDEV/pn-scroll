@@ -1,4 +1,3 @@
-import {ImplHttpRequestParameters, ImplHttpResponse} from "./index";
 import {AppSettings, Setting} from "../../Settings";
 import {Platform} from "react-native";
 import {Logger} from "loglevel";
@@ -6,6 +5,7 @@ import {getLogger} from "../../Log";
 import { v4 as guuid } from "uuid";
 import {PostImage} from "../index";
 import ImageLoadResult = PostImage.ImageLoadResult;
+import {ImplHttpRequestParameters, ImplHttpResponse} from "../request";
 
 export let worker: RequestProxyHost;
 export async function executeLocalProxyRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
@@ -22,7 +22,7 @@ export async function setupLocalProxyClient() {
         return;
     }
 
-    worker = new RequestProxyHost();
+    worker = new RequestProxyHost(navigator.serviceWorker);
     await worker.initialize();
 }
 
@@ -43,12 +43,12 @@ class RequestProxyHost {
     private readonly logger: Logger;
     private readonly requests: { [key: string]: PendingWorkerRequest };
     private readonly addressChangeListener: () => void;
+    private readonly worker: ServiceWorkerContainer;
 
-    private worker: Worker | null;
+    constructor(worker: ServiceWorkerContainer) {
+        this.worker = worker;
 
-    constructor() {
         this.logger = getLogger("request-proxy-host");
-        this.worker = null;
         this.requests = {};
 
         this.addressChangeListener = AppSettings.registerChangeCallback(Setting.WebProxyServerAddress, () => {
@@ -57,11 +57,6 @@ class RequestProxyHost {
     }
 
     destroy() {
-        if(this.worker) {
-            /* TODO: Proper terminate after sending destroy message? */
-            this.worker.terminate();
-            this.worker = null;
-        }
         this.addressChangeListener();
     }
 
@@ -87,16 +82,21 @@ class RequestProxyHost {
     }
 
     async downloadImage(url: string, headers: { [key: string]: string }): Promise<ImageLoadResult> {
-        const result = await this.execute("download-image", { url, headers });
+        /*
+         * Images will be proxied via the service worker.
+         * We only register the custom headers.
+         */
+
+        const result = await this.execute("register-image", { url, headers });
         if(result.status !== "success") {
             return { status: "failure", message: result.message };
         }
 
-        const loadResult = result.result as ImageLoadResult;
-        if(loadResult.status === "success") {
-            loadResult.unload = () => {};
-        }
-        return loadResult;
+        return {
+            status: "success",
+            imageUri: url,
+            unload: () => {}
+        };
     }
 
     private async setupConnectionParameters() {
@@ -109,22 +109,23 @@ class RequestProxyHost {
     }
 
     private spawnWorker() {
-        const worker = this.worker = new Worker(new URL('proxy-worker/Worker', import.meta.url));
-        this.worker.onerror = error => {
-            if(worker != this.worker) {
+        this.worker.addEventListener("message", ((event: MessageEvent) => {
+            if(typeof event.data !== "object") {
                 return;
             }
 
-            this.handleWorkerError(error);
-        }
-
-        this.worker.onmessage = event => {
-            if(worker != this.worker) {
+            const { scope } = event.data;
+            if(scope !== "web-proxy") {
+                /* message is not for us */
                 return;
             }
 
             this.handleWorkerMessage(event.data);
-        }
+        }) as any);
+
+        this.worker.addEventListener("error", event => {
+            /* Worker error. Terminate all requests */
+        });
     }
 
     private handleWorkerError(error: ErrorEvent) {
@@ -153,7 +154,7 @@ class RequestProxyHost {
 
     private async execute(request: string, payload: any,) : Promise<RequestWorkerResult> {
         const token = guuid();
-        this.worker?.postMessage({ type: "request", request, payload, token });
+        this.worker?.controller!.postMessage({ scope: "web-proxy", type: "request", request, payload, token });
 
         const result = await new Promise<RequestWorkerResult>(resolve => {
             this.requests[token] = {

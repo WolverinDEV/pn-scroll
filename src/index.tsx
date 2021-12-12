@@ -10,6 +10,7 @@ import {ImageDetailedViewHook} from "./ui/components/ImageDetailedView";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {PortalProvider} from "@gorhom/portal";
 import "./Array";
+import {initializeLogScope} from "./Log";
 
 namespace Colors {
     export const primary = '#1292B4';
@@ -44,6 +45,7 @@ const App: () => Node = () => {
     );
 };
 
+initializeLogScope("window");
 AppRegistry.registerComponent("pn-scroll", () => App);
 
 if(Platform.OS === "web") {

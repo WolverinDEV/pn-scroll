@@ -8,11 +8,8 @@ import {
 } from "../../cache/Cache";
 import {extractErrorMessage} from "../../../utils";
 import {kvHeadersToObject, objectHeadersToKv} from "../../blog-provider/Helper";
-import {MemoryCacheResolver} from "../../cache/CacheResolver";
 import {getLogger} from "../../../Log";
-import {PostImage} from "../../index";
-import ImageLoadResult = PostImage.ImageLoadResult;
-import {ProxyRequestClient} from "./Client";
+import {ProxyRequestClient} from "./ProxyClient";
 
 const logger = getLogger("web-image-cache");
 
@@ -139,58 +136,13 @@ async function executeImageDownload({ url, headers, proxyClient }: CacheLoadRequ
     return { status: "failure", message: "html result" };
 }
 
-const imageCache = createItemCache<CacheLoadRequest, CacheLoadResult>(
+export const imageCache = createItemCache<CacheLoadRequest, CacheLoadResult>(
     key => key.url,
     [
         new WebCacheLoader(),
         async request => ({
             status: "cache-hit",
             value: await executeImageDownload(request)
-        })
+        }),
     ]
 )
-
-const imageUrlCache = createItemCache<CacheLoadRequest, ImageLoadResult>(
-    key => key.url,
-    [
-        new MemoryCacheResolver(),
-        async request => {
-            const result = await imageCache.resolve(request);
-            switch (result.status) {
-                case "error":
-                    return { status: "cache-error", message: result.message };
-
-                case "missing":
-                    return kResolveResultMiss;
-
-                case "resolved":
-                    let loadResult: ImageLoadResult;
-                    if(result.value.status === "success") {
-                        const url = URL.createObjectURL(result.value.data);
-                        loadResult = { status: "success", imageUri: url, unload: () => {} };
-                    } else {
-                        loadResult = { status: "failure", message: result.value.message };
-                    }
-
-                    return {
-                        status: "cache-hit",
-                        value: loadResult
-                    };
-            }
-        }
-    ]
-);
-
-export async function downloadImage(proxyClient: ProxyRequestClient | undefined, url: string, headers: { [key: string]: string }): Promise<ImageLoadResult> {
-    const result = await imageUrlCache.resolve({ url, headers, proxyClient });
-    switch (result.status) {
-        case "error":
-            return { status: "failure", message: result.message };
-
-        case "missing":
-            return { status: "failure", message: "this should never happen" };
-
-        case "resolved":
-            return result.value;
-    }
-}

@@ -1,7 +1,7 @@
-import { executeLocalProxyRequest } from "./WebProxy";
 import {Platform} from "react-native";
 import {Buffer} from "buffer";
 import {parse as parseHtml, HTMLElement} from "node-html-parser";
+import {executeLocalProxyRequest} from "../web/WebProxy";
 
 export type ImplHttpRequestParameters = {
     headers: { [key: string]: string },

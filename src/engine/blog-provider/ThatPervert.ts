@@ -41,7 +41,7 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
 
     constructor() {
         this.urlBase = "http://thatpervert.com/tag/Masturbation+Hentai";
-        this.urlBase = "http://thatpervert.com/";
+        //this.urlBase = "http://thatpervert.com/";
     }
 
     cached(key: CacheKey<number>): boolean { return false; }
