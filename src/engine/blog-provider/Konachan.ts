@@ -50,7 +50,7 @@ type KonachenPage = {
 class KonachenPageLoader implements ItemCacheResolver<number, KonachenPage> {
     constructor(readonly url: string, readonly filter: FeedFilter) { }
 
-    cached(key: CacheKey<number>): boolean { return false; }
+    async cached(key: CacheKey<number>): Promise<boolean> { return false; }
     delete(key: CacheKey<number>): void { }
     save(key: CacheKey<number>, value: KonachenPage): void { }
 

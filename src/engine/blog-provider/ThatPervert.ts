@@ -44,7 +44,7 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
         //this.urlBase = "http://thatpervert.com/";
     }
 
-    cached(key: CacheKey<number>): boolean { return false; }
+    async cached(key: CacheKey<number>): Promise<boolean> { return false; }
     delete(key: CacheKey<number>): void { }
     save(key: CacheKey<number>, value: ThatPervertPage): void { }
 

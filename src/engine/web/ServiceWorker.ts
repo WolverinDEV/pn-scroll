@@ -1,6 +1,8 @@
 import {getLogger} from "../../Log";
 import {extractErrorMessage} from "../../utils";
 
+type WorkerState = "installing" | "active";
+
 const logger = getLogger("service-worker");
 export async function registerServiceWorker() {
     /*
@@ -20,15 +22,19 @@ export async function registerServiceWorker() {
         throw "failed to register service worker";
     }
 
+    await new Promise<void>(resolve => {
+        if(registeredWorker.installing) {
+            registeredWorker.installing.addEventListener("statechange", () => resolve());
+        } else {
+            resolve();
+        }
+    });
+
     if(!registeredWorker.active) {
-        /* FIXME: Wait 'till active! */
+        /* This should never happen! */
         throw "registered service worker is not active";
     }
 
     registeredWorker.active.postMessage({ type: "hello" });
-    navigator.serviceWorker.onmessage = event => {
-        logger.info("Received message: %o", event.data);
-    }
-
     logger.info("Service worker registered.");
 }

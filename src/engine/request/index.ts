@@ -1,7 +1,7 @@
 import {Platform} from "react-native";
 import {Buffer} from "buffer";
 import {parse as parseHtml, HTMLElement} from "node-html-parser";
-import {executeLocalProxyRequest} from "../web/WebProxy";
+import {executeFetchRequest} from "../web/WebProxy";
 
 export type ImplHttpRequestParameters = {
     headers: { [key: string]: string },
@@ -119,7 +119,7 @@ export async function executeRequest<R extends keyof HttpResponseType>(
         implRequest.headers["User-Agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1";
     }
 
-    const implResponse = await doExecuteRequest(implRequest);
+    const implResponse = await platformExecuteRequest(implRequest);
     switch (implResponse.status) {
         case "failure-internal":
             return {
@@ -203,14 +203,14 @@ function arrayBuffer2String(buffer: ArrayBuffer) : Promise<string> {
     }
 }
 
-function doExecuteRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
+function platformExecuteRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
     switch (Platform.OS) {
         case "web":
-            return executeLocalProxyRequest(request);
+            return executeFetchRequest(request);
 
         case "android":
         case "ios":
-            return executeReactNativeFetch(request);
+            return executeXMLRequest(request);
 
         default:
             return Promise.resolve({
@@ -220,11 +220,11 @@ function doExecuteRequest(request: ImplHttpRequestParameters) : Promise<ImplHttp
     }
 }
 
-function executeReactNativeFetch(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
-    /*
-     * We have to use XMLHttpRequests since react-natives fetch implementation does not support arrayBuffer() yet.
-     * If it would we could use a similar implementation like the local proxy.
-     */
+/*
+ * We have to use XMLHttpRequests since react-natives fetch implementation does not support arrayBuffer() yet.
+ * If it would we could use a similar implementation like the local proxy.
+ */
+function executeXMLRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
     const xmlRequest = new XMLHttpRequest();
     xmlRequest.responseType = "arraybuffer";
 

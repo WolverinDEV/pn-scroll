@@ -14,7 +14,7 @@ process.env.NODE_ENV = mode;
 if(targetPlatform === "web") {
     module.exports = {
         entry: {
-            app: path.resolve(__dirname, "src", "index.tsx")
+            app: path.resolve(__dirname, "src", "index.tsx"),
         },
         output: {
             filename: '[name]_[fullhash].web.js',
@@ -51,9 +51,9 @@ if(targetPlatform === "web") {
                     test: /\.tsx?$/,
                     exclude: /node_modules/,
                     use: [
-                        "babel-loader",
+                        //"babel-loader",
                         "ts-loader"
-                    ]
+                    ],
                 },
                 {
                     test: /\.(gif|jpe?g|png|svg)$/,
@@ -93,6 +93,7 @@ if(targetPlatform === "web") {
         devServer: {
             compress: true,
             historyApiFallback: true,
+            hot: false
         },
 
         optimization: {

@@ -35,7 +35,7 @@ export class MemoryCacheResolver<K, V> implements ItemCacheResolver<K, V> {
         return "cache";
     }
 
-    cached(key: CacheKey<K>): boolean {
+    async cached(key: CacheKey<K>): Promise<boolean> {
         return key.cacheKey in this.cache;
     }
 
@@ -69,7 +69,7 @@ export abstract class SyncCacheResolver<K, V> implements ItemCacheResolver<K, V>
         [key: string]: { callbacks: SyncCacheCallback<V>[] }
     } = {};
 
-    abstract cached(key: CacheKey<K>): boolean;
+    abstract cached(key: CacheKey<K>): Promise<boolean>;
     abstract delete(key: CacheKey<K>): void;
     abstract name(): string;
     abstract role(): ResolverRole;
@@ -119,6 +119,6 @@ export class ResolverCacheResolver<K, V> implements ItemCacheResolver<K, V> {
     }
 
     save(key: CacheKey<K>, value: V): void { }
-    cached(key: CacheKey<K>): boolean { return false; }
+    async cached(key: CacheKey<K>): Promise<boolean> { return false; }
     delete(key: CacheKey<K>): void { }
 }

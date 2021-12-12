@@ -7,5 +7,15 @@ export async function downloadImage(url: string, headers: { [key: string]: strin
         return { status: "failure", message: "missing worker" };
     }
 
-    return await worker.downloadImage(url, headers);
+    /*
+     * Images will be proxied via the service worker.
+     * We only register the custom headers.
+     */
+    await worker.registerImage(url, headers);
+
+    return {
+        status: "success",
+        imageUri: url,
+        unload: () => {}
+    };
 }

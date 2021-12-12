@@ -24,7 +24,7 @@ export interface ItemCache<K, V> {
     resolve(key: K, options?: ResolveOptions<V> & { defaultValue: never }) : Promise<ItemCacheResolveResult<V>>;
     resolve(key: K, options?: ResolveOptions<V> & { defaultValue: V }) : Promise<V>;
 
-    cached(key: K) : boolean;
+    cached(key: K) : Promise<boolean>;
     delete(key: K) : void;
 }
 
@@ -61,7 +61,7 @@ export interface ItemCacheResolver<K, V> {
 
     resolve(key: CacheKey<K>, options: ResolveOptions<V>) : ResolveResult<V> | Promise<ResolveResult<V>>;
 
-    cached(key: CacheKey<K>) : boolean;
+    cached(key: CacheKey<K>) : Promise<boolean>;
 
     /**
      * Called when a value has been successfully resolved and this cache has returned "cache-miss".
@@ -81,10 +81,10 @@ class SyncItemCache<K, V> implements ItemCache<K, V> {
 
     constructor(readonly keyGenerator: CacheKeyGenerator<K>, readonly resolver: ItemCacheResolver<K, V>[]) { }
 
-    cached(key: K): boolean {
+    async cached(key: K): Promise<boolean> {
         const cacheKey = this.generateCacheKey(key);
         for(const resolver of this.resolver) {
-            if(resolver.cached(cacheKey)) {
+            if(await resolver.cached(cacheKey)) {
                 return true;
             }
         }

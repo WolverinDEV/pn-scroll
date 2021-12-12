@@ -60,9 +60,15 @@ class WebCacheLoader implements ItemCacheResolver<CacheLoadRequest, CacheLoadRes
         return "cache";
     }
 
-    cached(key: CacheKey<CacheLoadRequest>): boolean {
-        /* TODO: May make the cached(...) method async? */
-        return false;
+    async cached(key: CacheKey<CacheLoadRequest>): Promise<boolean> {
+        const cache = await this.cache;
+        if(!cache) {
+            return false;
+        }
+
+        const cacheKey = WebCacheLoader.generateRequest(key);
+        const response = await cache.match(cacheKey);
+        return !!response;
     }
 
     delete(key: CacheKey<CacheLoadRequest>): void {
@@ -107,7 +113,7 @@ class WebCacheLoader implements ItemCacheResolver<CacheLoadRequest, CacheLoadRes
     }
 }
 
-async function executeImageDownload({ url, headers, proxyClient }: CacheLoadRequest) : Promise<CacheLoadResult> {
+async function downloadImage({ url, headers, proxyClient }: CacheLoadRequest) : Promise<CacheLoadResult> {
     if(!proxyClient) {
         return { status: "failure", message: "missing request client" };
     }
@@ -142,7 +148,7 @@ export const imageCache = createItemCache<CacheLoadRequest, CacheLoadResult>(
         new WebCacheLoader(),
         async request => ({
             status: "cache-hit",
-            value: await executeImageDownload(request)
+            value: await downloadImage(request)
         }),
     ]
 )

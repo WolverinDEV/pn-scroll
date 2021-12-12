@@ -3,17 +3,52 @@ import {Platform} from "react-native";
 import {Logger} from "loglevel";
 import {getLogger} from "../../Log";
 import { v4 as guuid } from "uuid";
-import {PostImage} from "../index";
-import ImageLoadResult = PostImage.ImageLoadResult;
 import {ImplHttpRequestParameters, ImplHttpResponse} from "../request";
+import {objectHeadersToKv} from "../blog-provider/Helper";
+import {extractErrorMessage} from "../../utils";
 
 export let worker: RequestProxyHost;
-export async function executeLocalProxyRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
+export async function executeFetchRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
     if(!worker) {
         return { status: "failure-internal", message: "worker not initialized" };
     }
 
-    return await worker.proxyRequest(request);
+    await worker.registerRequest(request);
+
+    let body: ReadableStream<Uint8Array> | null = null;
+    const bodyBuffer = request.body;
+    if(bodyBuffer && bodyBuffer.byteLength > 0) {
+        let consumed = false;
+        body = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                if(consumed || !request.body) {
+                    controller.close();
+                } else {
+                    controller.enqueue(new Uint8Array(bodyBuffer));
+                    consumed = true;
+                }
+            }
+        })
+    }
+
+    let response: Response;
+    try {
+        response = await fetch(request.url, { method: request.method, body: body, cache: "force-cache" });
+    } catch (error) {
+        return { status: "failure-internal", message: extractErrorMessage(error) };
+    }
+
+    try {
+        return {
+            status: "success",
+            statusCode: response.status,
+            statusText: response.statusText,
+            headers: objectHeadersToKv(response.headers),
+            payload: await response.arrayBuffer()
+        };
+    } catch (error) {
+        return { status: "failure-internal", message: "body download failed: " + extractErrorMessage(error) };
+    }
 }
 
 export async function setupLocalProxyClient() {
@@ -71,32 +106,14 @@ class RequestProxyHost {
         await this.setupConnectionParameters();
     }
 
-    async proxyRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
-        /* TODO: Actually transfer the request and response buffers to avoid unnecessary copies */
-        const result = await this.execute("proxy-request", request);
-        if(result.status !== "success") {
-            return { status: "failure-internal", message: result.message };
-        }
-
-        return result.result;
+    async registerRequest({ url, headers }: ImplHttpRequestParameters): Promise<void> {
+        /* FIXME: handle error */
+        await this.executeThrow("register-request", { url, headers })
     }
 
-    async downloadImage(url: string, headers: { [key: string]: string }): Promise<ImageLoadResult> {
-        /*
-         * Images will be proxied via the service worker.
-         * We only register the custom headers.
-         */
-
-        const result = await this.execute("register-image", { url, headers });
-        if(result.status !== "success") {
-            return { status: "failure", message: result.message };
-        }
-
-        return {
-            status: "success",
-            imageUri: url,
-            unload: () => {}
-        };
+    async registerImage(url: string, headers: { [key: string]: string }): Promise<void> {
+        /* FIXME: handle error */
+        await this.executeThrow("register-image", { url, headers });
     }
 
     private async setupConnectionParameters() {
@@ -109,7 +126,7 @@ class RequestProxyHost {
     }
 
     private spawnWorker() {
-        this.worker.addEventListener("message", ((event: MessageEvent) => {
+        this.worker.addEventListener("message", (event: MessageEvent) => {
             if(typeof event.data !== "object") {
                 return;
             }
@@ -121,15 +138,7 @@ class RequestProxyHost {
             }
 
             this.handleWorkerMessage(event.data);
-        }) as any);
-
-        this.worker.addEventListener("error", event => {
-            /* Worker error. Terminate all requests */
         });
-    }
-
-    private handleWorkerError(error: ErrorEvent) {
-        this.logger.error("Worker encountered error: %o", error);
     }
 
     private handleWorkerMessage(message: any) {

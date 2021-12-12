@@ -34,7 +34,7 @@ export class ProxyRequestClient {
     }
 
     destroy() {
-        /* TODO! */
+        this.executeDisconnect();
     }
 
     async execute(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
