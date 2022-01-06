@@ -21,7 +21,7 @@ const imageCache = createItemCache<{ info: ImageInfo, blog: BlogProvider }, Imag
 );
 const kImageDownloadUnavailable: ImageLoadResult = { status: "failure", message: "download unavailable", recoverable: false };
 
-export const PostImageRenderer = React.memo((props: { source: ImageInfo, blog: BlogProvider } & Omit<PlatformImageProps, "source">) => {
+export const ImageRenderer = React.memo((props: { source: ImageInfo, blog: BlogProvider } & Omit<PlatformImageProps, "source">) => {
     const [ imageUri, setImageUri ] = useState<string | null>(null);
 
     useEffect(() => {

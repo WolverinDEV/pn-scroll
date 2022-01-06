@@ -1,8 +1,8 @@
-import {BufferInputStream, BufferOutputStream} from "../../Buffer";
 import {extractErrorMessage} from "../../../utils";
 import {Logger} from "loglevel";
 import {getLogger} from "../../../Log";
 import {ImplHttpRequestParameters, ImplHttpResponse} from "../../request";
+import { BufferInputStream, BufferOutputStream } from "../../buffer/Buffer";
 
 type RequestResult = {
     status: "success",

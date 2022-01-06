@@ -50,7 +50,7 @@ export function kvHeadersToObject(headers: { [key: string]: string }) {
 
 export function objectHeadersToKv(headers: Headers) {
     const result: { [key: string]: string } = {};
-    for(const [ key, value ] of headers) {
+    for(const [ key, value ] of headers as any) {
         result[key] = value;
     }
     return result;

@@ -2,6 +2,8 @@ import {imageCache} from "./Images";
 import {messageHandler, requestClient} from "./Messages";
 import {objectHeadersToKv} from "../../blog-provider/Helper";
 import {serviceWorker} from "./Scope";
+import {Logger} from "loglevel";
+import {getLogger} from "../../../Log";
 
 type RegisteredRequest = {
     url: string,
@@ -11,10 +13,12 @@ type RegisteredRequest = {
 
 const kResponseMissingRequestWorker = new Response("Missing request worker", { status: 500 });
 class FetchProxy {
+    private readonly logger: Logger;
     private readonly registeredRequests: { [key: string]: RegisteredRequest } = {};
     private readonly listenerFetchEvent: any;
 
     constructor() {
+        this.logger = getLogger("fetch-proxy");
         this.listenerFetchEvent = (event: FetchEvent) => this.handleFetchEvent(event);
     }
 
@@ -35,6 +39,12 @@ class FetchProxy {
     }
 
     private handleFetchEvent(event: FetchEvent) {
+        this.logger.info("Having request %s.", event.request.url);
+        if(event.request.url.indexOf("phncdn.com") !== -1) {
+            event.respondWith(FetchProxy.processProxyRequest(event.request, { url: event.request.url, headers: {}, mode: "fetch" }));
+            return;
+        }
+
         if(!(event.request.url in this.registeredRequests)) {
             /* We don't proxy the request. */
             return;
@@ -92,6 +102,11 @@ class FetchProxy {
 
                 case "failure":
                 case "success":
+                    if(request.url.endsWith(".js")) {
+                        let text = new TextDecoder().decode(response.payload);
+                        text += `; console.log("Script %s executed!", "${request.url}");`;
+                        response.payload = new TextEncoder().encode(text);
+                    }
                     return new Response(response.payload, {
                         headers: response.headers,
                         status: response.statusCode,

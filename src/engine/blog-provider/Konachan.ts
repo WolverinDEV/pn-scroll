@@ -250,10 +250,6 @@ export class KonachenBlogProvider implements BlogProvider {
         this.safeSearch = safeSearch;
     }
 
-    id(): string {
-        return this.url();
-    }
-
     blogName(): string {
         return "Konachan"
     }

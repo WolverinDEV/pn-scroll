@@ -3,7 +3,12 @@ import {serviceWorker} from "./Scope";
 initializeLogScope("service-worker");
 
 const logger = getLogger("general");
-serviceWorker.addEventListener("activate", (event: ExtendableEvent) => {
+serviceWorker.addEventListener("activate", () => {
+    logger.info("Service worker activated.");
+});
+
+serviceWorker.addEventListener("install", event => {
+    console.error("Install: %o", event);
     logger.info("Service worker activated.");
 });
 

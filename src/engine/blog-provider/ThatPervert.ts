@@ -241,10 +241,6 @@ class ThatPervertFeedProvider implements FeedProvider {
 
 
 export class ThatPervertBlogProvider implements BlogProvider {
-    id(): string {
-        return "thatpervert.com";
-    }
-
     blogName(): string {
         return "Thatpervert";
     }

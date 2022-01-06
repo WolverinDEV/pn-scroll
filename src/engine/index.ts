@@ -43,6 +43,12 @@ export type FeedEntryImage = {
     metadata: { [key: string]: string }
 };
 
+export type FeedEntryPHVideo = {
+    type: "ph-video",
+    id: string,
+    viewKey: string
+};
+
 type FeedEntryError = {
     type: "error",
 } & ({
@@ -52,7 +58,7 @@ type FeedEntryError = {
     errorType: "not-found",
 });
 
-export type FeedEntry = FeedEntryImage | FeedEntryError;
+export type FeedEntry = FeedEntryImage | FeedEntryPHVideo | FeedEntryError;
 
 export type FeedFilter = {
     text?: string,
@@ -90,8 +96,6 @@ export type SearchHint = {
 };
 
 export interface BlogProvider {
-    /* FIXME: id() might be miss leading since the BlogRegistry uses different ids */
-    id() : string;
     blogName() : string;
     //blogIcon() : string; /* TODO! */
 

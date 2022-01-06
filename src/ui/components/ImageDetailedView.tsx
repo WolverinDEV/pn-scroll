@@ -1,6 +1,6 @@
 import React from "react";
 import {StyleSheet, TouchableWithoutFeedback, View} from "react-native";
-import {PostImageRenderer} from "./PostImage";
+import {ImageRenderer} from "./PostImage";
 import {Portal, PortalHost} from "@gorhom/portal";
 import {BlogProvider, PostImage} from "../../engine";
 import ImageInfo = PostImage.ImageInfo;
@@ -12,7 +12,7 @@ export const ImagePreview = React.memo((props: { image: ImageInfo, blog: BlogPro
                 console.info("Close preview!");
             }}>
                 <View style={style.outerContainer}>
-                    <PostImageRenderer source={props.image} blog={props.blog} style={{ height: "100%", width: "100%" }} resizeMode={"contain"} />
+                    <ImageRenderer source={props.image} blog={props.blog} style={{ height: "100%", width: "100%" }} resizeMode={"contain"} />
                 </View>
             </TouchableWithoutFeedback>
         </Portal>

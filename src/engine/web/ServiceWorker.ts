@@ -1,8 +1,6 @@
 import {getLogger} from "../../Log";
 import {extractErrorMessage} from "../../utils";
 
-type WorkerState = "installing" | "active";
-
 const logger = getLogger("service-worker");
 export async function registerServiceWorker() {
     /*
@@ -16,7 +14,7 @@ export async function registerServiceWorker() {
     try {
         /* TODO: Changing the service worker URL is bad practice: https://developers.google.com/web/fundamentals/primers/service-workers/lifecycle#avoid-url-change */
         registeredWorker = await navigator.serviceWorker.register(new URL('service-worker/Worker', import.meta.url));
-        await registeredWorker.update();
+        //await registeredWorker.update();
     } catch (error) {
         logger.error("Failed to register service worker: %s", extractErrorMessage(error));
         throw "failed to register service worker";

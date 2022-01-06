@@ -60,7 +60,7 @@ export class BufferOutputStream {
     private currentChunk: Buffer | undefined;
     private currentOffset: number = 0;
 
-    constructor(initialCapacity?: number) {
+    constructor(_initialCapacity?: number) {
         /* TODO: Use initial capacity */
     }
 

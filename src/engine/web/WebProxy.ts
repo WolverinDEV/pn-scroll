@@ -33,7 +33,14 @@ export async function executeFetchRequest(request: ImplHttpRequestParameters) : 
 
     let response: Response;
     try {
-        response = await fetch(request.url, { method: request.method, body: body, cache: "force-cache" });
+        response = await fetch(request.url, {
+            method: request.method,
+            body: body,
+            cache: "force-cache",
+            headers: {
+                "x-target-url": request.url
+            }
+        });
     } catch (error) {
         return { status: "failure-internal", message: extractErrorMessage(error) };
     }
@@ -78,10 +85,11 @@ class RequestProxyHost {
     private readonly logger: Logger;
     private readonly requests: { [key: string]: PendingWorkerRequest };
     private readonly addressChangeListener: () => void;
-    private readonly worker: ServiceWorkerContainer;
+    private readonly workerContainer: ServiceWorkerContainer;
+    private worker: ServiceWorkerRegistration | undefined;
 
     constructor(worker: ServiceWorkerContainer) {
-        this.worker = worker;
+        this.workerContainer = worker;
 
         this.logger = getLogger("request-proxy-host");
         this.requests = {};
@@ -96,7 +104,7 @@ class RequestProxyHost {
     }
 
     async initialize() {
-        this.spawnWorker();
+        await this.initializeWorker();
 
         const initializeError = await this.executeThrow("initialize", {});
         if(initializeError) {
@@ -125,8 +133,9 @@ class RequestProxyHost {
         }
     }
 
-    private spawnWorker() {
-        this.worker.addEventListener("message", (event: MessageEvent) => {
+    private async initializeWorker() {
+        this.worker = await this.workerContainer.ready;
+        this.workerContainer.addEventListener("message", (event: MessageEvent) => {
             if(typeof event.data !== "object") {
                 return;
             }
@@ -163,7 +172,7 @@ class RequestProxyHost {
 
     private async execute(request: string, payload: any,) : Promise<RequestWorkerResult> {
         const token = guuid();
-        this.worker?.controller!.postMessage({ scope: "web-proxy", type: "request", request, payload, token });
+        this.worker?.active!.postMessage({ scope: "web-proxy", type: "request", request, payload, token });
 
         const result = await new Promise<RequestWorkerResult>(resolve => {
             this.requests[token] = {
