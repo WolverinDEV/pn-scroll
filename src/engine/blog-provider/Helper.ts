@@ -1,4 +1,5 @@
 import { ItemCache } from "../cache/Cache";
+import { SuggestionResult } from "../index";
 
 export function promisifyIDBRequest<T>(request: IDBRequest<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
@@ -54,4 +55,63 @@ export function objectHeadersToKv(headers: Headers) {
         result[key] = value;
     }
     return result;
+}
+
+export type KnownTag = {
+    /**
+     * The original tag to work with.
+     */
+    tag: string,
+
+    /**
+     * Tag has been trimmed and is in all lowercase.
+     */
+    tagNormalized: string,
+
+    /**
+     * Which priority the tag has.
+     * The higher the better.
+     */
+    priority: number
+};
+
+export class TagSuggest {
+    private readonly knownTags: Promise<KnownTag[] | null>;
+
+    constructor(
+        knownTags: Promise<KnownTag[] | null>
+    ) {
+        this.knownTags = knownTags.then(tags => {
+            tags?.sort((a, b) => b.priority - a.priority);
+            return tags;
+        });
+    }
+
+    async suggest(text: string, abortSignal: AbortSignal): Promise<SuggestionResult> {
+        let tags = await this.knownTags;
+        if (!tags?.length) {
+            return { status: "error", message: "failed to load tags" };
+        } else if (abortSignal.aborted) {
+            return { status: "aborted" };
+        }
+
+        text = text.toLowerCase();
+
+        const suggestions = [];
+        for (const { tag, tagNormalized } of tags) {
+            if (!tagNormalized.startsWith(text)) {
+                continue;
+            }
+
+            suggestions.push(tag);
+            if (suggestions.length > 100) {
+                break;
+            }
+        }
+
+        return {
+            status: "success",
+            suggestions: suggestions
+        };
+    }
 }

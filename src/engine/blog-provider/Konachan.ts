@@ -1,6 +1,6 @@
 import { BlogProvider, FeedEntry, FeedFilter, FeedProvider, SearchHint, SuggestionResult } from "../index";
 import { executeRequest } from "../request";
-import { ensurePageLoaderSuccess } from "./Helper";
+import { ensurePageLoaderSuccess, KnownTag, TagSuggest } from "./Helper";
 import { HTMLElement } from "node-html-parser";
 import {
     CacheKey,
@@ -14,25 +14,30 @@ import {
 import { MemoryCacheResolver } from "../cache/CacheResolver";
 import { extractErrorMessage } from "../../utils";
 import { downloadImage } from "../request/Image";
-import "./KonachenTagGenerator";
 import { SearchParseResult } from "../Search";
 import { ImageInfo, ImageLoadResult } from "../types/PostImage";
+import "./KonachenTagGenerator";
 
-const knownTagMap: { [key: string]: boolean } = {};
+const knownTagMap: Record<string, boolean> = {};
 const knownTags = import("./KonachenTags.json")
-    .then(result => result.default as KnownTag[])
+    .then(result => result.default as KonachenTag[])
     .then(result => {
-        for (const { name } of result) {
-            knownTagMap[name.substring(2)] = true;
+        for(const { name } of result) {
+            knownTagMap[name.trim().toLowerCase()] = true;
         }
-        return result;
+
+        return result.map<KnownTag>(entry => ({
+            tag: entry.name,
+            tagNormalized: entry.name.trim().toLowerCase(),
+            priority: entry.postCount
+        }));
     })
     .catch(error => {
         console.warn("Failed to load Konachen tags: %o", error);
         return null;
     });
 
-type KnownTag = {
+type KonachenTag = {
     postCount: number,
     name: string,
     type: string
@@ -252,9 +257,11 @@ class KonachenFeedProvider implements FeedProvider {
 
 export class KonachenBlogProvider implements BlogProvider {
     private readonly safeSearch: boolean;
+    private readonly tagSuggest: TagSuggest;
 
     constructor(safeSearch: boolean) {
         this.safeSearch = safeSearch;
+        this.tagSuggest = new TagSuggest(knownTags);
     }
 
     blogName(): string {
@@ -270,32 +277,7 @@ export class KonachenBlogProvider implements BlogProvider {
     }
 
     async queryTagSuggestions(text: string, abortSignal: AbortSignal): Promise<SuggestionResult> {
-        let tags = await knownTags;
-        if (!tags?.length) {
-            return { status: "error", message: "failed to load tags" };
-        } else if (abortSignal.aborted) {
-            return { status: "aborted" };
-        }
-
-        text = text.toLowerCase();
-
-        const suggestions = [];
-        for (const { name } of tags) {
-            let tagName = name.substring(2);
-            if (!tagName.toLowerCase().startsWith(text)) {
-                continue;
-            }
-
-            suggestions.push(tagName);
-            if (suggestions.length > 100) {
-                break;
-            }
-        }
-
-        return {
-            status: "success",
-            suggestions: suggestions
-        };
+        return await this.tagSuggest.suggest(text, abortSignal);
     }
 
     async analyzeSearch(search: SearchParseResult, abortSignal: AbortSignal): Promise<SearchHint[]> {
@@ -311,7 +293,7 @@ export class KonachenBlogProvider implements BlogProvider {
         let tags = await knownTags;
         if (tags?.length) {
             for (const { value: tag } of [ ...search.includeTags, ...search.excludeTags ]) {
-                if (tag in knownTagMap) {
+                if (tag.trim().toLowerCase() in knownTagMap) {
                     continue;
                 }
 

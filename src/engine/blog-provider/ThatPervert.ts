@@ -1,5 +1,5 @@
 import { BlogProvider, FeedEntry, FeedFilter, FeedProvider, SearchHint, SuggestionResult, } from "../index";
-import { ensurePageLoaderSuccess } from "./Helper";
+import { ensurePageLoaderSuccess, KnownTag, TagSuggest } from "./Helper";
 import { executeRequest } from "../request";
 import { HTMLElement } from "node-html-parser";
 import {
@@ -18,10 +18,24 @@ import "./ThatPervertTagGenerator";
 import { SearchParseResult } from "../Search";
 import { ImageInfo, ImageLoadResult, PostImage } from "../types/PostImage";
 
-const knownTags = import("./ThatPervertTags.json");
-knownTags.then(result => {
-    console.info("Known tags: %o", result.length);
-});
+const knownTags = import("./ThatPervertTags.json")
+    .then(result => result.default as ThatPervertTag[])
+    .then(result => {
+        return result.map<KnownTag>(entry => ({
+            tag: entry.tag,
+            priority: 1e9 - entry.discovered.length,
+            tagNormalized: entry.tag.trim().toLowerCase()
+        }));
+    })
+    .catch(error => {
+        console.warn("Failed to load ThatPervert tags: %o", error);
+        return null;
+    });
+
+type ThatPervertTag = {
+    tag: string,
+    discovered: string
+};
 
 type ThatPervertPage = {
     navigator: {
@@ -35,10 +49,17 @@ type ThatPervertPage = {
 
 class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage> {
     private readonly urlBase: string;
+    private readonly filter: FeedFilter;
 
-    constructor() {
-        this.urlBase = "http://thatpervert.com/tag/Masturbation+Hentai";
-        //this.urlBase = "http://thatpervert.com/";
+    constructor(filter: FeedFilter) {
+        this.filter = filter;
+
+        const [ tag ] = filter.includeCategories ?? [];
+        if(tag) {
+            this.urlBase = "http://thatpervert.com/tag/" + tag.replace(/ /g, "+");
+        } else {
+            this.urlBase = "http://thatpervert.com/";
+        }
     }
 
     async cached(key: CacheKey<number>): Promise<boolean> {
@@ -210,7 +231,7 @@ class ThatPervertFeedProvider implements FeedProvider {
             page => page.toString(),
             [
                 new MemoryCacheResolver(),
-                new ThatPervertPageLoader()
+                new ThatPervertPageLoader(filter)
             ]
         );
     }
@@ -244,6 +265,12 @@ class ThatPervertFeedProvider implements FeedProvider {
 
 
 export class ThatPervertBlogProvider implements BlogProvider {
+    private readonly tagSuggest: TagSuggest;
+
+    constructor() {
+        this.tagSuggest = new TagSuggest(knownTags);
+    }
+
     blogName(): string {
         return "Thatpervert";
     }
@@ -257,12 +284,18 @@ export class ThatPervertBlogProvider implements BlogProvider {
     }
 
     async queryTagSuggestions(text: string, abortSignal: AbortSignal): Promise<SuggestionResult> {
-        return { status: "error", message: "not implemented" };
+        return await this.tagSuggest.suggest(text, abortSignal);
     }
 
     async analyzeSearch(search: SearchParseResult, abortSignal: AbortSignal): Promise<SearchHint[]> {
         const hints: SearchHint[] = [];
 
+        if(search.query) {
+            hints.push({
+                type: "warning",
+                message: "Only tags will"
+            });
+        }
         if (search.query && search.query.value.length > 0) {
             if (search.includeTags.length > 0) {
                 hints.push({
