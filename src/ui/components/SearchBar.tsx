@@ -1,6 +1,14 @@
-import React, {ForwardedRef, MutableRefObject, RefObject, useEffect, useRef, useState} from "react";
+import React, { ForwardedRef, MutableRefObject, RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {BlogProvider, SearchHint, SuggestionResult} from "../../engine";
-import {ScrollView, StyleSheet, Text, TextInput, TextInputProps, View} from "react-native";
+import {
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TextInputProps,
+    TouchableWithoutFeedback,
+    View
+} from "react-native";
 import {useObjectReducer} from "../hooks/ObjectReducer";
 import {useHistory} from "react-router-native";
 import {parseSearchText, SearchParseResult} from "../../engine/Search";
@@ -31,6 +39,7 @@ const kInitialSelectionState: SelectionState = {
     end: null
 };
 
+type TextSelection = { start: number; end?: number | undefined } | undefined;
 const CursorFixTextInput = React.forwardRef((
     props: TextInputProps & { refCursor?: MutableRefObject<SelectionState> },
     refInput: ForwardedRef<TextInput>
@@ -41,7 +50,47 @@ const CursorFixTextInput = React.forwardRef((
     }
 
     if(!("HTMLInputElement" in self)) {
-        return <TextInput key={"no-web"} {...props} />;
+        const selectionApplied = useRef(false);
+        const selection = useMemo<TextSelection>(() => {
+            if(!props.refCursor?.current) {
+                return undefined;
+            }
+
+            const { start, end } = props.refCursor?.current;
+            if(typeof start === "number") {
+                selectionApplied.current = false;
+                return { start, end: end ?? undefined };
+            } else {
+                return undefined;
+            }
+        }, [ props.refCursor, props.value ]);
+
+        return (
+            <TextInput
+                key={"no-web"}
+                selection={(() => {
+                    if(selectionApplied.current) {
+                        return undefined;
+                    }
+
+                    selectionApplied.current = true;
+                    return selection;
+                })()}
+                onSelectionChange={event => {
+                    if(!props.refCursor) {
+                        return;
+                    }
+
+                    const { start, end } = event.nativeEvent.selection;
+                    if(start === end) {
+                        props.refCursor.current = { start, end: null };
+                    } else {
+                        props.refCursor.current = { start, end };
+                    }
+                }}
+                {...props}
+            />
+        );
     }
 
     const defaultRefCursor = useRef<SelectionState>(kInitialSelectionState);
@@ -165,6 +214,7 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             draft.suggestionsAbortController?.abort();
             draft.suggestionsAbortController = null;
 
+            console.info("Loading suggestions for %s", prefix);
             if(prefix?.startsWith("!")) {
                 prefix = prefix?.substring(1);
             }
@@ -212,8 +262,9 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             draft.suggestionSelected = draft.suggestionsAvailable.suggestions[index] || null;
             console.error("Select %d %s", index, draft.suggestionSelected);
         },
-        submitSuggestion: draft => {
-            if(!draft.suggestionSelected || !draft.parseState) {
+        submitSuggestion: (draft, suggestion: string | undefined) => {
+            const suggestionSelected = suggestion ?? draft.suggestionSelected;
+            if(!suggestionSelected || !draft.parseState) {
                 return;
             }
 
@@ -249,11 +300,12 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             let newText: string;
             if(refSelection.current) {
                 /* fixup selection */
-                refSelection.current.start = editingValue.begin + draft.suggestionSelected.length + suggestionPrefix.length;
+                refSelection.current.start = editingValue.begin + suggestionSelected.length + suggestionPrefix.length;
                 refSelection.current.end = refSelection.current.start;
             }
 
-            newText = draft.text.substring(0, editingValue.begin) + suggestionPrefix + draft.suggestionSelected + draft.text.substring(editingValue.end);
+            console.info("Inserting: %s", suggestionPrefix);
+            newText = draft.text.substring(0, editingValue.begin) + suggestionPrefix + suggestionSelected + draft.text.substring(editingValue.end);
 
             dispatch("setText", { text: newText, cursor: refSelection.current?.start || 0, showSuggestions: false });
             dispatch("loadSuggestions", null);
@@ -290,12 +342,15 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                     refCursor={refSelection}
 
                     style={style.input}
-                    placeholder={"Search tags"}
                     value={state.text}
+
+                    placeholderTextColor={"white"}
+                    placeholder={"Search tags"}
+
                     onBlur={() => dispatch("loadSuggestions", null)}
                     onChange={event => dispatch("setText", {
                         text: event.nativeEvent.text,
-                        cursor: refSelection.current.start || 0,
+                        cursor: refSelection.current.start ?? 0,
                         showSuggestions: true
                     })}
                     onKeyPress={event => {
@@ -315,7 +370,7 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                                     event.preventDefault();
                                 }
 
-                                dispatch("submitSuggestion");
+                                dispatch("submitSuggestion", undefined);
                                 break;
 
                             case "Enter":
@@ -323,8 +378,16 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                                 break;
                         }
                     }}
+                    onSubmitEditing={() => dispatch("submit")}
                 />
-                {state.suggestionsOpen && <SuggestionProvider key={"suggestions"} status={state.suggestionsAvailable} selectedSuggestion={state.suggestionSelected} />}
+                {state.suggestionsOpen && (
+                    <SuggestionProvider
+                        key={"suggestions"}
+                        status={state.suggestionsAvailable}
+                        selectedSuggestion={state.suggestionSelected}
+                        selectSuggestion={suggestion => dispatch("submitSuggestion", suggestion)}
+                    />
+                )}
                 <HintProvider hints={state.searchHints} />
             </View>
         </View>
@@ -344,7 +407,11 @@ const HintProvider = React.memo(({ hints }: { hints: SearchHint[] }) => {
     );
 });
 
-const SuggestionProvider = React.memo((props: { status: SuggestionResult | { status: "loading" | "unset" }, selectedSuggestion: string | null, }) => {
+const SuggestionProvider = React.memo((props: {
+    status: SuggestionResult | { status: "loading" | "unset" },
+    selectedSuggestion: string | null,
+    selectSuggestion: (suggestion: string) => void
+}) => {
     let body;
     switch (props.status.status) {
         case "loading":
@@ -369,7 +436,16 @@ const SuggestionProvider = React.memo((props: { status: SuggestionResult | { sta
             }
 
             body = props.status.suggestions.map(suggestion => (
-                <Text key={suggestion} style={[styleSuggestions.suggestion, suggestion === props.selectedSuggestion && styleSuggestions.suggestionSelected]}>{suggestion}</Text>
+                <TouchableWithoutFeedback
+                    onPress={() => props.selectSuggestion(suggestion)}
+                    key={suggestion}
+                >
+                    <Text
+                        style={[styleSuggestions.suggestion, suggestion === props.selectedSuggestion && styleSuggestions.suggestionSelected]}
+                    >
+                        {suggestion}
+                    </Text>
+                </TouchableWithoutFeedback>
             ));
             break;
 
@@ -380,7 +456,10 @@ const SuggestionProvider = React.memo((props: { status: SuggestionResult | { sta
     }
 
     return (
-        <ScrollView style={styleSuggestions.suggestionContainer}>
+        <ScrollView
+            style={styleSuggestions.suggestionContainer}
+            keyboardShouldPersistTaps={"always"}
+        >
             {body}
         </ScrollView>
     )
@@ -458,6 +537,7 @@ const style = StyleSheet.create({
         paddingBottom: 2,
 
         color: "white",
+
 
         padding: 6
     },

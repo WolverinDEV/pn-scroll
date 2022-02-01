@@ -1,15 +1,16 @@
-import {AppSettings, Setting} from "../../Settings";
-import {Platform} from "react-native";
-import {Logger} from "loglevel";
-import {getLogger} from "../../Log";
+import { AppSettings, Setting } from "../../Settings";
+import { Platform } from "react-native";
+import { Logger } from "loglevel";
+import { getLogger } from "../../Log";
 import { v4 as guuid } from "uuid";
-import {ImplHttpRequestParameters, ImplHttpResponse} from "../request";
-import {objectHeadersToKv} from "../blog-provider/Helper";
-import {extractErrorMessage} from "../../utils";
+import { ImplHttpRequestParameters, ImplHttpResponse } from "../request";
+import { objectHeadersToKv } from "../blog-provider/Helper";
+import { extractErrorMessage } from "../../utils";
 
 export let worker: RequestProxyHost;
-export async function executeFetchRequest(request: ImplHttpRequestParameters) : Promise<ImplHttpResponse> {
-    if(!worker) {
+
+export async function executeFetchRequest(request: ImplHttpRequestParameters): Promise<ImplHttpResponse> {
+    if (!worker) {
         return { status: "failure-internal", message: "worker not initialized" };
     }
 
@@ -17,11 +18,11 @@ export async function executeFetchRequest(request: ImplHttpRequestParameters) : 
 
     let body: ReadableStream<Uint8Array> | null = null;
     const bodyBuffer = request.body;
-    if(bodyBuffer && bodyBuffer.byteLength > 0) {
+    if (bodyBuffer && bodyBuffer.byteLength > 0) {
         let consumed = false;
         body = new ReadableStream<Uint8Array>({
             pull(controller) {
-                if(consumed || !request.body) {
+                if (consumed || !request.body) {
                     controller.close();
                 } else {
                     controller.enqueue(new Uint8Array(bodyBuffer));
@@ -59,7 +60,7 @@ export async function executeFetchRequest(request: ImplHttpRequestParameters) : 
 }
 
 export async function setupLocalProxyClient() {
-    if(Platform.OS !== "web") {
+    if (Platform.OS !== "web") {
         /* We don't initialize it */
         return;
     }
@@ -107,7 +108,7 @@ class RequestProxyHost {
         await this.initializeWorker();
 
         const initializeError = await this.executeThrow("initialize", {});
-        if(initializeError) {
+        if (initializeError) {
             throw new Error("initialize failed: " + initializeError);
         }
 
@@ -126,7 +127,7 @@ class RequestProxyHost {
 
     private async setupConnectionParameters() {
         const result = await this.execute("connection-setup", { url: AppSettings.getValue(Setting.WebProxyServerAddress) });
-        if(result.status === "failure") {
+        if (result.status === "failure") {
             this.logger.warn("Failed to setup server connection: %s", result.message);
         } else {
             this.logger.debug("Connection parameter successfully updated/initialized.");
@@ -136,12 +137,12 @@ class RequestProxyHost {
     private async initializeWorker() {
         this.worker = await this.workerContainer.ready;
         this.workerContainer.addEventListener("message", (event: MessageEvent) => {
-            if(typeof event.data !== "object") {
+            if (typeof event.data !== "object") {
                 return;
             }
 
             const { scope } = event.data;
-            if(scope !== "web-proxy") {
+            if (scope !== "web-proxy") {
                 /* message is not for us */
                 return;
             }
@@ -152,15 +153,15 @@ class RequestProxyHost {
 
     private handleWorkerMessage(message: any) {
         const { type } = message;
-        if(type === "response") {
+        if (type === "response") {
             const { token, status } = message;
             const request = this.requests[token];
-            if(!request) {
+            if (!request) {
                 this.logger.warn("Received request response for unknown request %s.", token);
                 return;
             }
 
-            if(status === "success") {
+            if (status === "success") {
                 request.callback({ status: "success", result: message.payload });
             } else {
                 request.callback({ status: "failure", message: message.message || "unknown error" });
@@ -170,7 +171,7 @@ class RequestProxyHost {
         }
     }
 
-    private async execute(request: string, payload: any,) : Promise<RequestWorkerResult> {
+    private async execute(request: string, payload: any,): Promise<RequestWorkerResult> {
         const token = guuid();
         this.worker?.active!.postMessage({ scope: "web-proxy", type: "request", request, payload, token });
 
@@ -186,9 +187,9 @@ class RequestProxyHost {
         return result;
     }
 
-    private async executeThrow(request: string, payload: any) : Promise<any> {
+    private async executeThrow(request: string, payload: any): Promise<any> {
         const response = await this.execute(request, payload);
-        if(response.status !== "success") {
+        if (response.status !== "success") {
             throw new Error(response.message);
         }
 

@@ -1,16 +1,16 @@
-import {WebSocketServer, WebSocket, Server} from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { ImplHttpRequestParameters, ImplHttpResponse } from "../../src/engine/request";
+import { extractErrorMessage } from "../../src/utils";
+import { BufferInputStream, BufferOutputStream } from "../../src/engine/buffer/Buffer";
 import fetch, { Headers } from "node-fetch";
-import {BufferInputStream, BufferOutputStream} from "../../src/engine/Buffer";
-import {extractErrorMessage} from "../../src/utils";
 import fs from "fs";
 import net from "net";
 import http from "http";
-import https, {createServer} from "https";
+import https from "https";
 
-async function executeRequest(request: Omit<ImplHttpRequestParameters, "body"> & { body: Buffer }) : Promise<ImplHttpResponse> {
+async function executeRequest(request: Omit<ImplHttpRequestParameters, "body"> & { body: Buffer }): Promise<ImplHttpResponse> {
     const headers = new Headers();
-    for(const header of Object.keys(request.headers)) {
+    for (const header of Object.keys(request.headers)) {
         headers.append(header, request.headers[header]);
     }
 
@@ -22,7 +22,7 @@ async function executeRequest(request: Omit<ImplHttpRequestParameters, "body"> &
         });
 
         const responseHeaders: { [key: string]: string } = {};
-        for(const key of response.headers.keys()) {
+        for (const key of response.headers.keys()) {
             responseHeaders[key] = response.headers.get(key)!;
         }
 
@@ -34,7 +34,7 @@ async function executeRequest(request: Omit<ImplHttpRequestParameters, "body"> &
             payload: await response.arrayBuffer()
         }
     } catch (error: any) {
-        if(error instanceof Error) {
+        if (error instanceof Error) {
             return {
                 status: "failure-internal",
                 message: error.message
@@ -62,13 +62,14 @@ requestHandler[1] = async (socket, reader) => {
     switch (response.status) {
         case "failure":
         case "success":
-            result.writeUInt8(response.status === "success" ? 0 : 1);+
-            result.writeUInt32LE(response.statusCode);
+            result.writeUInt8(response.status === "success" ? 0 : 1);
+            +
+                result.writeUInt32LE(response.statusCode);
             result.writeVarString(response.statusText);
 
             const headers = Object.keys(response.headers);
             result.writeUInt32LE(headers.length);
-            for(const key of headers) {
+            for (const key of headers) {
                 result.writeVarString(key);
                 result.writeVarString(response.headers[key]);
             }
@@ -95,7 +96,7 @@ function handleConnection(socket: WebSocket) {
         const requestTypeId = reader.readUInt32LE();
         const requestId = reader.readUInt32LE();
 
-        if(!requestHandler[requestTypeId]) {
+        if (!requestHandler[requestTypeId]) {
             const writer = new BufferOutputStream();
             writer.writeUInt32LE(requestId);
             writer.writeUInt32LE(0xFF);
@@ -142,12 +143,12 @@ const server: {
     [key in "http" | "https"]?: http.Server
 } = {};
 
-server["http"] = http.createServer({ });
+server["http"] = http.createServer({});
 setupWebSocketServer(server["http"]).then(() => {
     console.info("Local request proxy started on ws://localhost:" + serverPort);
 });
 
-if("SSL_CERTIFICATE" in process.env && "SSL_KEY" in process.env) {
+if ("SSL_CERTIFICATE" in process.env && "SSL_KEY" in process.env) {
     const certificatePath = process.env.SSL_CERTIFICATE as string;
     const keyPath = process.env.SSL_KEY as string;
 

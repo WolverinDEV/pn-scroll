@@ -1,26 +1,23 @@
-import {
-    BlogProvider,
-    FeedFilter,
-    FeedEntry,
-    FeedProvider,
-    PostImage, SuggestionResult, SearchHint,
-} from "../index";
-import {ensurePageLoaderSuccess} from "./Helper";
-import {executeRequest} from "../request";
-import {HTMLElement} from "node-html-parser";
+import { BlogProvider, FeedEntry, FeedFilter, FeedProvider, SearchHint, SuggestionResult, } from "../index";
+import { ensurePageLoaderSuccess } from "./Helper";
+import { executeRequest } from "../request";
+import { HTMLElement } from "node-html-parser";
 import {
     CacheKey,
-    createItemCache, ItemCache,
+    createItemCache,
+    ItemCache,
     ItemCacheResolver,
     ResolveOptions,
     ResolveResult,
     ResolverRole
 } from "../cache/Cache";
-import {extractErrorMessage} from "../../utils";
-import {MemoryCacheResolver} from "../cache/CacheResolver";
-import {downloadImage} from "../request/Image";
+import { extractErrorMessage } from "../../utils";
+import { MemoryCacheResolver } from "../cache/CacheResolver";
+import { downloadImage } from "../request/Image";
 import "./ThatPervertTagGenerator";
-import {SearchParseResult} from "../Search";
+import { SearchParseResult } from "../Search";
+import { ImageInfo, ImageLoadResult, PostImage } from "../types/PostImage";
+
 const knownTags = import("./ThatPervertTags.json");
 knownTags.then(result => {
     console.info("Known tags: %o", result.length);
@@ -44,9 +41,15 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
         //this.urlBase = "http://thatpervert.com/";
     }
 
-    async cached(key: CacheKey<number>): Promise<boolean> { return false; }
-    delete(key: CacheKey<number>): void { }
-    save(key: CacheKey<number>, value: ThatPervertPage): void { }
+    async cached(key: CacheKey<number>): Promise<boolean> {
+        return false;
+    }
+
+    delete(key: CacheKey<number>): void {
+    }
+
+    save(key: CacheKey<number>, value: ThatPervertPage): void {
+    }
 
     name(): string {
         return "ThatPervert loader";
@@ -60,11 +63,11 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
         const response = await executeRequest({
             type: "GET",
             url: key.key === -1 ? this.urlBase : this.urlBase + "/" + key.key,
-            urlParameters: {  },
+            urlParameters: {},
             responseType: "html"
         });
 
-        if(response.status !== "success") {
+        if (response.status !== "success") {
             return {
                 status: "cache-error",
                 message: response.statusText + " (" + response.payload + ")"
@@ -84,7 +87,7 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
         }
     }
 
-    private parsePage(pageId: number, container: HTMLElement) : ThatPervertPage {
+    private parsePage(pageId: number, container: HTMLElement): ThatPervertPage {
         let result: ThatPervertPage = {
             navigator: {
                 current: pageId,
@@ -97,14 +100,14 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
         /* extract the page count */
         {
             const pagination = container.querySelector("#Pagination");
-            if(!pagination) {
+            if (!pagination) {
                 throw new Error("missing #paginator");
             }
 
             const prevUrl = pagination.querySelector("a.prev")?.getAttribute("href");
-            if(prevUrl) {
+            if (prevUrl) {
                 const urlMatch = /\/([0-9]+)$/gm.exec(prevUrl)
-                if(!urlMatch || urlMatch.length < 2) {
+                if (!urlMatch || urlMatch.length < 2) {
                     result.navigator.prev = "main";
                 } else {
                     result.navigator.prev = parseInt(urlMatch[1]);
@@ -112,9 +115,9 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
             }
 
             const nextUrl = pagination.querySelector("a.next")?.getAttribute("href");
-            if(nextUrl) {
+            if (nextUrl) {
                 const urlMatch = /\/([0-9]+)$/gm.exec(nextUrl)
-                if(!urlMatch || urlMatch.length < 2) {
+                if (!urlMatch || urlMatch.length < 2) {
                     result.navigator.next = "main";
                 } else {
                     result.navigator.next = parseInt(urlMatch[1]);
@@ -125,28 +128,28 @@ class ThatPervertPageLoader implements ItemCacheResolver<number, ThatPervertPage
         /* extract the post entries */
         {
             const posts = container.querySelectorAll("#post_list .postContainer");
-            for(const postNode of posts) {
+            for (const postNode of posts) {
                 const postImages: PostImage[] = [];
 
                 let postUrl: string;
                 {
                     const manageLinkNode = postNode.querySelector(".manage .link");
-                    if(!manageLinkNode) {
+                    if (!manageLinkNode) {
                         console.warn("Missing .manage .link Node for post.");
                         continue;
                     }
                     postUrl = manageLinkNode.getAttribute("href")!;
                 }
 
-                for(const postImage of postNode.querySelectorAll(".post_content .image")) {
+                for (const postImage of postNode.querySelectorAll(".post_content .image")) {
                     const previewNode = postImage.querySelector("img");
-                    if(!previewNode) {
+                    if (!previewNode) {
                         console.warn("Missing preview node for post image");
                         continue;
                     }
 
                     const anchorNode = postImage.querySelector("a");
-                    if(anchorNode) {
+                    if (anchorNode) {
                         const detailedUrl = anchorNode.getAttribute("href")!;
                         const previewUrl = previewNode.getAttribute("src")!;
 
@@ -203,7 +206,7 @@ class ThatPervertFeedProvider implements FeedProvider {
     private readonly pageLoader: ItemCache<number, ThatPervertPage>;
 
     constructor(readonly filter: FeedFilter) {
-        this.pageLoader =  createItemCache<number, ThatPervertPage>(
+        this.pageLoader = createItemCache<number, ThatPervertPage>(
             page => page.toString(),
             [
                 new MemoryCacheResolver(),
@@ -221,10 +224,10 @@ class ThatPervertFeedProvider implements FeedProvider {
         const firstPage = await ensurePageLoaderSuccess(this.pageLoader, -1);
 
         const { prev, next } = firstPage.navigator;
-        if(prev === null && next === null) {
+        if (prev === null && next === null) {
             /* we only got one page */
             return 1;
-        } else if(typeof next === "number") {
+        } else if (typeof next === "number") {
             return next + 1;
         } else {
             throw "TODO: search page count!"
@@ -260,8 +263,8 @@ export class ThatPervertBlogProvider implements BlogProvider {
     async analyzeSearch(search: SearchParseResult, abortSignal: AbortSignal): Promise<SearchHint[]> {
         const hints: SearchHint[] = [];
 
-        if(search.query && search.query.value.length > 0) {
-            if(search.includeTags.length > 0) {
+        if (search.query && search.query.value.length > 0) {
+            if (search.includeTags.length > 0) {
                 hints.push({
                     type: "warning",
                     message: "Combining search text with tags is not recommended and leads to truncated results."
@@ -272,7 +275,7 @@ export class ThatPervertBlogProvider implements BlogProvider {
         return hints;
     }
 
-    loadImage(image: PostImage.ImageInfo): Promise<PostImage.ImageLoadResult> {
+    loadImage(image: ImageInfo): Promise<ImageLoadResult> {
         return downloadImage(image.identifier, {
             Referer: "http://thatpervert.com"
         });

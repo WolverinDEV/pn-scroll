@@ -1,10 +1,9 @@
-import {createItemCache} from "../../engine/cache/Cache";
-import {MemoryCacheResolver} from "../../engine/cache/CacheResolver";
-import React, {useEffect, useState} from "react";
-import {PlatformImage, PlatformImageProps} from "./platform-image";
-import {BlogProvider, PostImage} from "../../engine";
-import ImageLoadResult = PostImage.ImageLoadResult;
-import ImageInfo = PostImage.ImageInfo;
+import React, { useEffect, useState } from "react";
+import { createItemCache } from "../../engine/cache/Cache";
+import { MemoryCacheResolver } from "../../engine/cache/CacheResolver";
+import { PlatformImage, PlatformImageProps } from "./platform-image";
+import { BlogProvider } from "../../engine";
+import { ImageInfo, ImageLoadResult } from "../../engine/types/PostImage";
 
 const imageCache = createItemCache<{ info: ImageInfo, blog: BlogProvider }, ImageLoadResult>(
     key => key.info.identifier,
@@ -19,7 +18,11 @@ const imageCache = createItemCache<{ info: ImageInfo, blog: BlogProvider }, Imag
         }
     ]
 );
-const kImageDownloadUnavailable: ImageLoadResult = { status: "failure", message: "download unavailable", recoverable: false };
+const kImageDownloadUnavailable: ImageLoadResult = {
+    status: "failure",
+    message: "download unavailable",
+    recoverable: false
+};
 
 export const ImageRenderer = React.memo((props: { source: ImageInfo, blog: BlogProvider } & Omit<PlatformImageProps, "source">) => {
     const [ imageUri, setImageUri ] = useState<string | null>(null);
@@ -33,32 +36,35 @@ export const ImageRenderer = React.memo((props: { source: ImageInfo, blog: BlogP
             unloadCallback: undefined
         };
 
-        imageCache.resolve({ info: props.source, blog: props.blog }, { defaultValue: kImageDownloadUnavailable }).then(result => {
-            if(refAbort.aborted) {
-                if(result.status === "success") {
+        imageCache.resolve({
+            info: props.source,
+            blog: props.blog
+        }, { defaultValue: kImageDownloadUnavailable }).then(result => {
+            if (refAbort.aborted) {
+                if (result.status === "success") {
                     result.unload();
                 }
 
                 return;
             }
 
-            if(result.status === "success") {
+            if (result.status === "success") {
                 setImageUri(result.imageUri);
                 refAbort.unloadCallback = result.unload;
-            } else if(props.onError) {
+            } else if (props.onError) {
                 props.onError();
             }
         });
 
         return () => {
             refAbort.aborted = true;
-            if(refAbort.unloadCallback) {
+            if (refAbort.unloadCallback) {
                 refAbort.unloadCallback();
             }
         };
-    }, [ ]);
+    }, []);
 
-    if(imageUri) {
+    if (imageUri) {
         return (
             <PlatformImage
                 {...props}

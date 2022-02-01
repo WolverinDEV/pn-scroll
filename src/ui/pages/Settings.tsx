@@ -4,7 +4,7 @@ import {
     TextInput,
     Text,
     View,
-    TouchableWithoutFeedback, Animated
+    TouchableWithoutFeedback, Animated, Platform
 } from "react-native";
 import {AppSettings, Setting} from "../../Settings";
 import {HoverAnimatedView, SimpleAnimatedValue} from "../components/Hoverable";
@@ -54,7 +54,10 @@ class ObservableValue<V> {
 
     use() : V {
         const [ value, setValue ] = useState<V>(this.currentValue);
-        useEffect(() => this.registerListener(setValue), [ ]);
+        useEffect(() => {
+            this.registerListener(setValue);
+            return () => this.removeListener(setValue);
+        }, [ setValue ]);
         return value;
     }
 }
@@ -240,7 +243,7 @@ export const PageSettings = React.memo(() => {
     return (
         <StateContext.Provider value={state}>
             <View style={style.container}>
-                <SettingServerAddress />
+                {Platform.OS === "web" ? <SettingServerAddress /> : undefined}
                 <SettingPreviewOpacity />
                 <ChangeIndicator />
             </View>

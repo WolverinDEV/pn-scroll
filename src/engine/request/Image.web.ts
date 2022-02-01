@@ -1,9 +1,8 @@
-import {PostImage} from "../index";
-import ImageLoadResult = PostImage.ImageLoadResult;
-import {worker} from "../web/WebProxy";
+import { worker } from "../web/WebProxy";
+import { ImageLoadResult } from "../types/PostImage";
 
 export async function downloadImage(url: string, headers: { [key: string]: string }): Promise<ImageLoadResult> {
-    if(!worker) {
+    if (!worker) {
         return { status: "failure", message: "missing worker" };
     }
 
@@ -16,6 +15,7 @@ export async function downloadImage(url: string, headers: { [key: string]: strin
     return {
         status: "success",
         imageUri: url,
-        unload: () => {}
+        unload: () => {
+        }
     };
 }

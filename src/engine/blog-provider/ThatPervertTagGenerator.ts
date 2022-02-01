@@ -1,5 +1,5 @@
-import {executeRequest} from "../request";
-import {asyncIDBIterator, promisifyIDBRequest} from "./Helper";
+import { executeRequest } from "../request";
+import { asyncIDBIterator, promisifyIDBRequest } from "./Helper";
 
 /*
  * Utils for fetching all ThatPervert tags.
@@ -10,7 +10,7 @@ import {asyncIDBIterator, promisifyIDBRequest} from "./Helper";
  */
 
 const kPromiseIgnoreConstraintError = (error: unknown) => {
-    if(error instanceof DOMException && error.name === "ConstraintError") {
+    if (error instanceof DOMException && error.name === "ConstraintError") {
         return;
     } else {
         throw error;
@@ -30,7 +30,7 @@ const openDatabase = async () => {
                 objectStore = database.createObjectStore("tags", { keyPath: "tag" });
                 objectStore = database.createObjectStore("failed", { keyPath: "prefix" });
                 objectStore = database.createObjectStore("backlog", { keyPath: "prefix" });
-                for(const prefix of generateTags("")) {
+                for (const prefix of generateTags("")) {
                     objectStore.add({ prefix });
                 }
         }
@@ -44,12 +44,12 @@ export const fetchTags = async () => {
     let transaction;
     let tagStore, backlogStore, failedStore;
 
-    while(true) {
-        transaction = database.transaction(["backlog"], "readwrite");
+    while (true) {
+        transaction = database.transaction([ "backlog" ], "readwrite");
         backlogStore = transaction.objectStore("backlog");
 
         const backlogEntry = await promisifyIDBRequest(backlogStore.openCursor());
-        if(!backlogEntry) {
+        if (!backlogEntry) {
             console.log("Backlog empty");
             break;
         }
@@ -59,9 +59,14 @@ export const fetchTags = async () => {
         let backlogLength = await promisifyIDBRequest(backlogStore.count());
         console.error("Execute query \"%s\" (%d queries left)", tagPrefix, backlogLength);
 
-        const result = await executeRequest({ type: "GET", url: "http://thatpervert.com/autocomplete/tag", urlParameters: { term: tagPrefix }, responseType: "json" });
-        if(result.status !== "success") {
-            transaction = database.transaction(["failed"], "readwrite");
+        const result = await executeRequest({
+            type: "GET",
+            url: "http://thatpervert.com/autocomplete/tag",
+            urlParameters: { term: tagPrefix },
+            responseType: "json"
+        });
+        if (result.status !== "success") {
+            transaction = database.transaction([ "failed" ], "readwrite");
             failedStore = transaction.objectStore("failed");
             await promisifyIDBRequest(failedStore.add({
                 prefix: tagPrefix,
@@ -72,8 +77,8 @@ export const fetchTags = async () => {
             continue;
         }
 
-        if(!Array.isArray(result.payload)) {
-            transaction = database.transaction(["failed"], "readwrite");
+        if (!Array.isArray(result.payload)) {
+            transaction = database.transaction([ "failed" ], "readwrite");
             failedStore = transaction.objectStore("failed");
             await promisifyIDBRequest(failedStore.add({
                 prefix: tagPrefix,
@@ -85,11 +90,11 @@ export const fetchTags = async () => {
         }
 
         const promises = [];
-        if(result.payload.length === 11) {
+        if (result.payload.length === 11) {
             console.info("Tag prefix %s resulted in %d suggestions. Adding tag prefix to deeper search.", tagPrefix, result.payload.length);
 
-            for(const tag of generateTags(tagPrefix)) {
-                transaction = database.transaction(["backlog"], "readwrite");
+            for (const tag of generateTags(tagPrefix)) {
+                transaction = database.transaction([ "backlog" ], "readwrite");
                 backlogStore = transaction.objectStore("backlog");
                 promises.push(promisifyIDBRequest(backlogStore.add({ prefix: tag })).catch(kPromiseIgnoreConstraintError));
             }
@@ -97,10 +102,13 @@ export const fetchTags = async () => {
             console.info("Tag prefix %s resulted in %d suggestions.", tagPrefix, result.payload.length);
         }
 
-        for(const tag of result.payload) {
-            transaction = database.transaction(["tags"], "readwrite");
+        for (const tag of result.payload) {
+            transaction = database.transaction([ "tags" ], "readwrite");
             tagStore = transaction.objectStore("tags");
-            promises.push(promisifyIDBRequest(tagStore.add({ tag, discovered: tagPrefix })).catch(kPromiseIgnoreConstraintError));
+            promises.push(promisifyIDBRequest(tagStore.add({
+                tag,
+                discovered: tagPrefix
+            })).catch(kPromiseIgnoreConstraintError));
         }
         await Promise.all(promises);
     }
@@ -108,7 +116,7 @@ export const fetchTags = async () => {
 
 export async function processTags() {
     const database = await openDatabase();
-    const transaction = database.transaction(["tags"], "readonly");
+    const transaction = database.transaction([ "tags" ], "readonly");
     const tagStore = transaction.objectStore("tags");
 
     const tags = [];
@@ -122,7 +130,7 @@ export async function processTags() {
     console.info("JSON: %s", JSON.stringify(tags))
 }
 
-if("window" in self) {
+if ("window" in self) {
     (window as any).ThatPervert = {
         processTags,
         fetchTags

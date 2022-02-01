@@ -3,7 +3,6 @@ import {createSlice} from "@reduxjs/toolkit";
 import {AppStore} from "./AppState";
 import {setupPlatformFunctions} from "./ui/SetupPlatform";
 import {setupBlogs} from "./engine/Blogs";
-import {registerServiceWorker} from "./engine/web/ServiceWorker";
 
 type LoaderState = {
     status: "loading" | "uninit" | "load"

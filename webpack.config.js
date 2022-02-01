@@ -107,6 +107,7 @@ if(targetPlatform === "web") {
     const reactNativePath = ReactNative.getReactNativePath();
     const context = ReactNative.getContext({ fallback: __dirname });
 
+    console.info("Dev-Server config: %o", devServer);
     /* HMR only available for development builds. */
     devServer.hmr = mode === "development" ? devServer.hmr : false;
 
@@ -156,6 +157,8 @@ if(targetPlatform === "web") {
                 {
                     test: /\.[jt]sx?$/,
                     include: [
+                        /node_modules(.*[/\\])+@gorhom/,
+                        /node_modules(.*[/\\])+@stream-io/,
                         /node_modules(.*[/\\])+react/,
                         /node_modules(.*[/\\])+@react-native/,
                         /node_modules(.*[/\\])+@react-navigation/,
@@ -168,17 +171,18 @@ if(targetPlatform === "web") {
                     ],
                     use: 'babel-loader',
                 },
-
                 {
                     test: /\.[jt]sx?$/,
                     exclude: /node_modules/,
-                    use: {
-                        loader: 'babel-loader',
-                        options: {
-                            /* Only add refresh plugin if we're using hmr. */
-                            plugins: devServer.hmr ? ['module:react-refresh/babel'] : undefined,
+                    use: [
+                        {
+                            loader: 'babel-loader',
+                            options: {
+                                /* Only add refresh plugin if we're using hmr. */
+                                plugins: devServer.hmr ? ['module:react-refresh/babel'] : undefined,
+                            },
                         },
-                    },
+                    ],
                 },
 
                 {
@@ -236,6 +240,8 @@ if(targetPlatform === "web") {
                 platform: targetPlatform,
                 devServerEnabled: devServer.enabled,
                 remoteChunksOutput: path.join(__dirname, 'build', targetPlatform, 'remote'),
+                /* We don't want any remote chunks. */
+                localChunks: /.*/
             }),
 
             /**
@@ -247,33 +253,8 @@ if(targetPlatform === "web") {
                 platform: targetPlatform,
             }),
 
-            /**
-             * Configures Source Maps for the main bundle based on CLI options received from
-             * React Native CLI or fallback value..
-             * It's recommended to leave the default values, unless you know what you're doing.
-             * Wrong options might cause symbolication of stack trace inside React Native app
-             * to fail - the app will still work, but you might not get Source Map support.
-             */
             new webpack.SourceMapDevToolPlugin({
                 test: /\.(js)?bundle$/,
-                exclude: /\.chunk\.(js)?bundle$/,
-                filename: '[file].map',
-                append: `//# sourceMappingURL=[url]?platform=${targetPlatform}`,
-                /**
-                 * Uncomment for faster builds but less accurate Source Maps
-                 */
-                // columns: false,
-            }),
-
-            /**
-             * Configures Source Maps for any additional chunks.
-             * It's recommended to leave the default values, unless you know what you're doing.
-             * Wrong options might cause symbolication of stack trace inside React Native app
-             * to fail - the app will still work, but you might not get Source Map support.
-             */
-            new webpack.SourceMapDevToolPlugin({
-                test: /\.(js)?bundle$/,
-                include: /\.chunk\.(js)?bundle$/,
                 filename: '[file].map',
                 append: `//# sourceMappingURL=[url]?platform=${targetPlatform}`,
                 /**

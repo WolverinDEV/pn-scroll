@@ -1,13 +1,13 @@
-import {ItemCache} from "../cache/Cache";
+import { ItemCache } from "../cache/Cache";
 
-export function promisifyIDBRequest<T>(request: IDBRequest<T>) : Promise<T> {
+export function promisifyIDBRequest<T>(request: IDBRequest<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve(request.result);
     });
 }
 
-export function asyncIDBIterator(request: IDBRequest<IDBCursorWithValue | null>) : AsyncIterable<{ value: any, cursor: Omit<IDBCursor, "continue" | "continuePrimaryKey"> }> {
+export function asyncIDBIterator(request: IDBRequest<IDBCursorWithValue | null>): AsyncIterable<{ value: any, cursor: Omit<IDBCursor, "continue" | "continuePrimaryKey"> }> {
     let cursor: IDBCursorWithValue | null;
     return {
         [Symbol.asyncIterator]() {
@@ -15,7 +15,7 @@ export function asyncIDBIterator(request: IDBRequest<IDBCursorWithValue | null>)
                 async next() {
                     cursor?.continue();
                     cursor = await promisifyIDBRequest(request);
-                    if(!cursor) {
+                    if (!cursor) {
                         return { done: true, value: null };
                     }
 
@@ -42,7 +42,7 @@ export async function ensurePageLoaderSuccess<K, V>(loader: ItemCache<K, V>, key
 
 export function kvHeadersToObject(headers: { [key: string]: string }) {
     const result = new Headers();
-    for(const header of Object.keys(headers)) {
+    for (const header of Object.keys(headers)) {
         result.append(header, headers[header]);
     }
     return result;
@@ -50,7 +50,7 @@ export function kvHeadersToObject(headers: { [key: string]: string }) {
 
 export function objectHeadersToKv(headers: Headers) {
     const result: { [key: string]: string } = {};
-    for(const [ key, value ] of headers as any) {
+    for (const [ key, value ] of headers as any) {
         result[key] = value;
     }
     return result;

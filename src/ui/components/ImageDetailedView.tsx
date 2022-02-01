@@ -1,9 +1,9 @@
 import React from "react";
-import {StyleSheet, TouchableWithoutFeedback, View} from "react-native";
-import {ImageRenderer} from "./PostImage";
-import {Portal, PortalHost} from "@gorhom/portal";
-import {BlogProvider, PostImage} from "../../engine";
-import ImageInfo = PostImage.ImageInfo;
+import { StyleSheet, TouchableWithoutFeedback, View } from "react-native";
+import { ImageRenderer } from "./PostImage";
+import { Portal, PortalHost } from "@gorhom/portal";
+import { BlogProvider } from "../../engine";
+import { ImageInfo } from "../../engine/types/PostImage";
 
 export const ImagePreview = React.memo((props: { image: ImageInfo, blog: BlogProvider }) => {
     return (
@@ -12,7 +12,8 @@ export const ImagePreview = React.memo((props: { image: ImageInfo, blog: BlogPro
                 console.info("Close preview!");
             }}>
                 <View style={style.outerContainer}>
-                    <ImageRenderer source={props.image} blog={props.blog} style={{ height: "100%", width: "100%" }} resizeMode={"contain"} />
+                    <ImageRenderer source={props.image} blog={props.blog} style={{ height: "100%", width: "100%" }}
+                                   resizeMode={"contain"}/>
                 </View>
             </TouchableWithoutFeedback>
         </Portal>
@@ -21,7 +22,7 @@ export const ImagePreview = React.memo((props: { image: ImageInfo, blog: BlogPro
 
 export const ImageDetailedViewHook = React.memo(() => {
     return (
-        <PortalHost name={"preview-image"} />
+        <PortalHost name={"preview-image"}/>
     );
 });
 

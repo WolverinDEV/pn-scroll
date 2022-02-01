@@ -1,6 +1,7 @@
-import {BlogProvider, FeedEntry, FeedFilter, FeedProvider, PostImage, SearchHint, SuggestionResult} from "../index";
+import {BlogProvider, FeedEntry, FeedFilter, FeedProvider, SearchHint, SuggestionResult} from "../index";
 import {SearchParseResult} from "../Search";
 import {downloadImage} from "../request/Image";
+import { ImageInfo, ImageLoadResult } from "../types/PostImage";
 
 class PornhubFeedProvider implements FeedProvider {
     async getPageCount(): Promise<number> {
@@ -47,7 +48,7 @@ export class PornhubBlogProvider implements BlogProvider {
         return new PornhubFeedProvider();
     }
 
-    loadImage(image: PostImage.ImageInfo): Promise<PostImage.ImageLoadResult> {
+    loadImage(image: ImageInfo): Promise<ImageLoadResult> {
         return downloadImage(image.identifier, { });
     }
 

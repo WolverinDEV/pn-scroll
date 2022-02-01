@@ -34,6 +34,7 @@ debugSearchText("tag:bondage Rope", []);
 debugSearchText("tag:home porn Nova", ["home porn"]);
 debugSearchText("tag:home porn Nova", []);
 debugSearchText("tag:home porn tag:test Nova", []);
+debugSearchText("Tag:home porn tag:test Nova", []);
 
 export function parseSearchText(text: string, knownTags: string[]): SearchParseResult {
     const keyMap: {
@@ -90,6 +91,8 @@ export function parseSearchText(text: string, knownTags: string[]): SearchParseR
 
     keyMap["!tag"] = keyMap["tag"];
     keyMap["tag-exclude"] = keyMap["tag"];
+
+    text = text.toLowerCase();
 
     let textOffset = 0;
     outerLoop:

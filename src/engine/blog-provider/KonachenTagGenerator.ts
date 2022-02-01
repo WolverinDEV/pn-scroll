@@ -1,4 +1,4 @@
-import {executeRequest} from "../request";
+import { executeRequest } from "../request";
 
 /*
  * Utils for fetching all Konachan tags.
@@ -12,8 +12,8 @@ const fetchTags = async () => {
     let page = 1;
 
     const tags: any[] = [];
-    while(true) {
-        if(page % 10 === 1) {
+    while (true) {
+        if (page % 10 === 1) {
             console.info("Query page %d (Tag count %d)", page, tags.length);
         } else {
             console.debug("Query page %d (Tag count %d)", page, tags.length);
@@ -31,19 +31,19 @@ const fetchTags = async () => {
             responseType: "html"
         });
 
-        if(response.status !== "success") {
+        if (response.status !== "success") {
             console.error("Failed to query: %o", response);
             break;
         }
 
         const contentTag = response.payload.querySelector("#content > table");
-        if(!contentTag) {
+        if (!contentTag) {
             console.error("Missing content node");
             break;
         }
 
         let tagCount = 0;
-        for(const trNode of contentTag.querySelectorAll("tbody tr")) {
+        for (const trNode of contentTag.querySelectorAll("tbody tr")) {
             const [ posts, name, type ] = trNode.querySelectorAll("td").map(node => node.textContent.replace(/\n/g, "").replace(/ +/g, " ").trim());
             const postCount = parseInt(posts);
             tags.push({
@@ -54,7 +54,7 @@ const fetchTags = async () => {
             tagCount++;
         }
 
-        if(tagCount === 0) {
+        if (tagCount === 0) {
             console.info("End reached");
             break;
         }
@@ -65,7 +65,7 @@ const fetchTags = async () => {
     console.info("Tags: %s", JSON.stringify(tags));
 };
 
-if("window" in self) {
+if ("window" in self) {
     (window as any).Konachan = {
         fetchTags
     };
