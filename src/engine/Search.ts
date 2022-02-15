@@ -26,16 +26,6 @@ const debugSearchText = (text: string, knownTags: string[]) => {
     });
 }
 
-/* tag:bondage Rope { knownTags: [] } -> tag: [bondage] query: Rope */
-/* tag:home porn Nova { knownTags: [home porn] } -> tag:[home porn] query: Nova */
-/* tag:home porn Nova { knownTags: [] } -> tag:[home] query: porn Nova */
-/* tag:home porn tag:test Nova { knownTags: [] } -> tag:[home porn, test] query: Nova */
-debugSearchText("tag:bondage Rope", []);
-debugSearchText("tag:home porn Nova", ["home porn"]);
-debugSearchText("tag:home porn Nova", []);
-debugSearchText("tag:home porn tag:test Nova", []);
-debugSearchText("Tag:home porn tag:test Nova", []);
-
 export function parseSearchText(text: string, knownTags: string[]): SearchParseResult {
     const keyMap: {
         [key: string] : (key: RefString, value: RefString, closed: boolean) => number | void,
@@ -92,13 +82,11 @@ export function parseSearchText(text: string, knownTags: string[]): SearchParseR
     keyMap["!tag"] = keyMap["tag"];
     keyMap["tag-exclude"] = keyMap["tag"];
 
-    text = text.toLowerCase();
-
     let textOffset = 0;
     outerLoop:
         while(text.length) {
             for(const keyWord of Object.keys(keyMap)) {
-                if(text.startsWith(keyWord + ":")) {
+                if(text.toLowerCase().startsWith(keyWord + ":")) {
                     const key: RefString = {
                         begin: textOffset,
                         end: textOffset + keyWord.length,
@@ -113,7 +101,7 @@ export function parseSearchText(text: string, knownTags: string[]): SearchParseR
                     };
 
                     for(const keyWord of Object.keys(keyMap)) {
-                        const index = value.value.indexOf(" " + keyWord + ":");
+                        const index = value.value.toLowerCase().indexOf(" " + keyWord + ":");
                         if(index === -1) {
                             continue;
                         }
@@ -130,6 +118,7 @@ export function parseSearchText(text: string, knownTags: string[]): SearchParseR
                         textOffset += value.end + 1;
 
                         value.value = value.value.substring(0, value.end);
+                        value.end = textOffset - 1;
                     } else {
                         value.end = textOffset + value.value.length;
                         textOffset = value.end;

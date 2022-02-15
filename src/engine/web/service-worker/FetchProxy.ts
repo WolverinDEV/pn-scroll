@@ -1,9 +1,8 @@
-import {imageCache} from "./Images";
-import {messageHandler, requestClient} from "./Messages";
-import {objectHeadersToKv} from "../../blog-provider/Helper";
-import {serviceWorker} from "./Scope";
-import {Logger} from "loglevel";
-import {getLogger} from "../../../Log";
+import { imageCache } from "./Images";
+import { messageHandler, requestClient } from "./Messages";
+import { objectHeadersToKv } from "../../blog-provider/Helper";
+import { serviceWorker } from "./Scope";
+import { getLogger, Logger } from "../../../Log";
 
 type RegisteredRequest = {
     url: string,
@@ -12,6 +11,7 @@ type RegisteredRequest = {
 };
 
 const kResponseMissingRequestWorker = new Response("Missing request worker", { status: 500 });
+
 class FetchProxy {
     private readonly logger: Logger;
     private readonly registeredRequests: { [key: string]: RegisteredRequest } = {};
@@ -40,18 +40,22 @@ class FetchProxy {
 
     private handleFetchEvent(event: FetchEvent) {
         this.logger.info("Having request %s.", event.request.url);
-        if(event.request.url.indexOf("phncdn.com") !== -1) {
-            event.respondWith(FetchProxy.processProxyRequest(event.request, { url: event.request.url, headers: {}, mode: "fetch" }));
+        if (event.request.url.indexOf("phncdn.com") !== -1) {
+            event.respondWith(FetchProxy.processProxyRequest(event.request, {
+                url: event.request.url,
+                headers: {},
+                mode: "fetch"
+            }));
             return;
         }
 
-        if(!(event.request.url in this.registeredRequests)) {
+        if (!(event.request.url in this.registeredRequests)) {
             /* We don't proxy the request. */
             return;
         }
 
         const requestInfo = this.registeredRequests[event.request.url];
-        if(requestInfo.mode !== "image") {
+        if (requestInfo.mode !== "image") {
             /* We keep the image info since the browser may load the images more than one time since we only display them on demand. */
             delete this.registeredRequests[event.request.url];
         }
@@ -60,8 +64,12 @@ class FetchProxy {
     }
 
     private static async processProxyRequest(request: Request, proxyInfo: RegisteredRequest): Promise<Response> {
-        if(proxyInfo.mode === "image") {
-            const result = await imageCache.resolve({ url: proxyInfo.url, headers: proxyInfo.headers, proxyClient: requestClient });
+        if (proxyInfo.mode === "image") {
+            const result = await imageCache.resolve({
+                url: proxyInfo.url,
+                headers: proxyInfo.headers,
+                proxyClient: requestClient
+            });
             switch (result.status) {
                 case "missing":
                     return new Response("Missing image cache entry. This should never happen!", { status: 500 });
@@ -70,7 +78,7 @@ class FetchProxy {
                     return new Response(result.message, { status: 500 });
 
                 case "resolved":
-                    if(result.value.status === "failure") {
+                    if (result.value.status === "failure") {
                         return new Response(result.value.message, { status: 500 });
                     } else {
                         return new Response(result.value.data, {
@@ -83,7 +91,7 @@ class FetchProxy {
                     return new Response("this should never happen!", { status: 500 });
             }
         } else {
-            if(!requestClient) {
+            if (!requestClient) {
                 return kResponseMissingRequestWorker;
             }
 
@@ -102,7 +110,7 @@ class FetchProxy {
 
                 case "failure":
                 case "success":
-                    if(request.url.endsWith(".js")) {
+                    if (request.url.endsWith(".js")) {
                         let text = new TextDecoder().decode(response.payload);
                         text += `; console.log("Script %s executed!", "${request.url}");`;
                         response.payload = new TextEncoder().encode(text);

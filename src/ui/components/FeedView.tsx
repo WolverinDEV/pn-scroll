@@ -217,22 +217,22 @@ const FeedEntryPHVideoRenderer = React.memo(() => {
      *        2. Play preview video on touch/hover
      */
     const refContainer = useRef<HTMLDivElement>(null);
-    // return (
-    //     <View style={{ marginTop: 5, marginBottom: 5, height: itemHeight, width: "100%" }} key={"image-default"}>
-    //         <iframe src={`https://www.pornhub.com/embed/${item.viewKey}`} height={"100%"} width={"100%"} frameBorder={0}
-    //                 scrolling={"no"} allowFullScreen={true}/>
-    //     </View>
-    // );
     return (
         <View style={{ marginTop: 5, marginBottom: 5, height: itemHeight, width: "100%" }} key={"image-default"}>
-            <WebView
-                scalesPageToFit={false}
-                source={{
-                    uri: `https://www.pornhub.com/embed/${item.viewKey}`
-                }}
-            />
+            <iframe src={`https://www.pornhub.com/embed/${item.viewKey}`} height={"100%"} width={"100%"} frameBorder={0}
+                    scrolling={"no"} allowFullScreen={true}/>
         </View>
     );
+    // return (
+    //     <View style={{ marginTop: 5, marginBottom: 5, height: itemHeight, width: "100%" }} key={"image-default"}>
+    //         <WebView
+    //             scalesPageToFit={false}
+    //             source={{
+    //                 uri: `https://www.pornhub.com/embed/${item.viewKey}`
+    //             }}
+    //         />
+    //     </View>
+    // );
 })
 
 const FeedEntryRenderer = React.memo(() => {

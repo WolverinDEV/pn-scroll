@@ -23,12 +23,12 @@ const knownTags = import("./KonachenTags.json")
     .then(result => result.default as KonachenTag[])
     .then(result => {
         for(const { name } of result) {
-            knownTagMap[name.trim().toLowerCase()] = true;
+            knownTagMap[name.substring(2).trim().toLowerCase()] = true;
         }
 
         return result.map<KnownTag>(entry => ({
-            tag: entry.name,
-            tagNormalized: entry.name.trim().toLowerCase(),
+            tag: entry.name.substring(2),
+            tagNormalized: entry.name.substring(2).trim().toLowerCase(),
             priority: entry.postCount
         }));
     })

@@ -1,6 +1,16 @@
-import React, { ForwardedRef, MutableRefObject, RefObject, useEffect, useMemo, useRef, useState } from "react";
-import {BlogProvider, SearchHint, SuggestionResult} from "../../engine";
+import React, {
+    ForwardedRef,
+    MouseEventHandler,
+    MutableRefObject,
+    RefObject,
+    useEffect,
+    useMemo,
+    useRef,
+    useState
+} from "react";
+import { BlogProvider, SearchHint, SuggestionResult } from "../../engine";
 import {
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -9,10 +19,10 @@ import {
     TouchableWithoutFeedback,
     View
 } from "react-native";
-import {useObjectReducer} from "../hooks/ObjectReducer";
-import {useHistory} from "react-router-native";
-import {parseSearchText, SearchParseResult} from "../../engine/Search";
-import {original} from "@reduxjs/toolkit";
+import { useObjectReducer } from "../hooks/ObjectReducer";
+import { useHistory } from "react-router-native";
+import { parseSearchText, SearchParseResult } from "../../engine/Search";
+import { original } from "@reduxjs/toolkit";
 
 type SearchBarState = {
     text: string,
@@ -44,20 +54,20 @@ const CursorFixTextInput = React.forwardRef((
     props: TextInputProps & { refCursor?: MutableRefObject<SelectionState> },
     refInput: ForwardedRef<TextInput>
 ) => {
-    if(typeof refInput === "function") {
+    if (typeof refInput === "function") {
         console.warn("CursorFixTextInput needs a MutableRefObject as reference to work!");
         return <TextInput key={"invalid-ref"} {...props} />;
     }
 
-    if(!("HTMLInputElement" in self)) {
+    if (!("HTMLInputElement" in self)) {
         const selectionApplied = useRef(false);
         const selection = useMemo<TextSelection>(() => {
-            if(!props.refCursor?.current) {
+            if (!props.refCursor?.current) {
                 return undefined;
             }
 
             const { start, end } = props.refCursor?.current;
-            if(typeof start === "number") {
+            if (typeof start === "number") {
                 selectionApplied.current = false;
                 return { start, end: end ?? undefined };
             } else {
@@ -69,7 +79,7 @@ const CursorFixTextInput = React.forwardRef((
             <TextInput
                 key={"no-web"}
                 selection={(() => {
-                    if(selectionApplied.current) {
+                    if (selectionApplied.current) {
                         return undefined;
                     }
 
@@ -77,12 +87,12 @@ const CursorFixTextInput = React.forwardRef((
                     return selection;
                 })()}
                 onSelectionChange={event => {
-                    if(!props.refCursor) {
+                    if (!props.refCursor) {
                         return;
                     }
 
                     const { start, end } = event.nativeEvent.selection;
-                    if(start === end) {
+                    if (start === end) {
                         props.refCursor.current = { start, end: null };
                     } else {
                         props.refCursor.current = { start, end };
@@ -103,11 +113,11 @@ const CursorFixTextInput = React.forwardRef((
     const [ selectionTimestamp, setSelectionTimestamp ] = useState<number>(0);
 
     useEffect(() => {
-        if(!refCursor.current) {
+        if (!refCursor.current) {
             return;
         }
 
-        if(refObject.current instanceof HTMLInputElement) {
+        if (refObject.current instanceof HTMLInputElement) {
             refObject.current.setSelectionRange(refCursor.current.start, refCursor.current.end);
         }
     }, [ refObject, selectionTimestamp, value ]);
@@ -119,7 +129,7 @@ const CursorFixTextInput = React.forwardRef((
             value={value}
             onChange={event => {
                 const eventTarget = event.target as any;
-                if(eventTarget instanceof HTMLInputElement) {
+                if (eventTarget instanceof HTMLInputElement) {
                     refCursor.current = {
                         start: eventTarget.selectionStart,
                         end: eventTarget.selectionEnd
@@ -128,7 +138,7 @@ const CursorFixTextInput = React.forwardRef((
                     setSelectionTimestamp(performance.now());
                 }
 
-                if(onChange) {
+                if (onChange) {
                     onChange(event);
                 }
             }}
@@ -155,21 +165,25 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
         suggestionsAvailable: { status: "unset" },
         suggestionsOpen: false,
     }, { immer: true })({
-        setText: (draft, { text, cursor, showSuggestions }: { text: string, cursor: number, showSuggestions: boolean }) => {
-            if(draft.text === text) {
+        setText: (draft, {
+            text,
+            cursor,
+            showSuggestions
+        }: { text: string, cursor: number, showSuggestions: boolean }) => {
+            if (draft.text === text) {
                 return;
             }
 
             console.info("Text: %s, Cursor: %d", text, cursor);
             draft.text = text;
             draft.textCursor = cursor;
-            draft.parseState = parseSearchText(text, ["home porn"]);
+            draft.parseState = parseSearchText(text, [ "home porn" ]);
 
 
-            if(showSuggestions) {
+            if (showSuggestions) {
                 let editingValue: string | null = null;
-                for(const tag of [...draft.parseState.includeTags, ...draft.parseState.excludeTags]) {
-                    if(tag.begin <= cursor && cursor <= tag.end) {
+                for (const tag of [ ...draft.parseState.includeTags, ...draft.parseState.excludeTags ]) {
+                    if (tag.begin <= cursor && cursor <= tag.end) {
                         /* Add +1 because that's the character we just added */
                         editingValue = tag.value.substring(0, cursor - tag.begin + 1);
                         console.info("Write in tag %s (%s)", tag.value, editingValue);
@@ -177,9 +191,9 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                     }
                 }
 
-                if(!editingValue && draft.parseState.query) {
+                if (!editingValue && draft.parseState.query) {
                     const query = draft.parseState.query;
-                    if(query.begin <= draft.textCursor && draft.textCursor <= query.end) {
+                    if (query.begin <= draft.textCursor && draft.textCursor <= query.end) {
                         editingValue = query.value.substring(0, cursor - query.begin + 1);
                     }
                 }
@@ -193,13 +207,13 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
         loadSearchHints: draft => {
             draft.searchHintsAbort?.abort();
             draft.searchHintsAbort = null;
-            if(!draft.parseState) {
+            if (!draft.parseState) {
                 return;
             }
 
             const abortController = draft.searchHintsAbort = new AbortController();
             props.blog.analyzeSearch(original(draft.parseState)!, abortController.signal).then(result => {
-                if(abortController.signal.aborted) {
+                if (abortController.signal.aborted) {
                     return;
                 }
 
@@ -215,11 +229,11 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             draft.suggestionsAbortController = null;
 
             console.info("Loading suggestions for %s", prefix);
-            if(prefix?.startsWith("!")) {
+            if (prefix?.startsWith("!")) {
                 prefix = prefix?.substring(1);
             }
 
-            if(!prefix) {
+            if (!prefix) {
                 draft.suggestionSelected = null;
                 draft.suggestionsOpen = false;
                 draft.suggestionsAvailable = { status: "unset" };
@@ -229,7 +243,7 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             draft.suggestionsAvailable = { status: "loading" };
             const abortController = draft.suggestionsAbortController = new AbortController();
             props.blog.queryTagSuggestions(prefix, abortController.signal).then(result => {
-                if(abortController.signal.aborted) {
+                if (abortController.signal.aborted) {
                     return;
                 }
 
@@ -241,21 +255,21 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             draft.suggestionsAvailable = payload;
 
             /* Show errors and suggestions only. */
-            if(payload.status === "success" && payload.suggestions.length > 0) {
+            if (payload.status === "success" && payload.suggestions.length > 0) {
                 draft.suggestionsOpen = true;
-            } else if(payload.status === "error") {
+            } else if (payload.status === "error") {
                 draft.suggestionsOpen = true;
             }
             console.info("Suggestion for %s: %o. Visible: %o", draft.text, payload, draft.suggestionsOpen);
         },
         selectNextSuggestion: (draft, direction: number) => {
-            if(draft.suggestionsAvailable.status !== "success") {
+            if (draft.suggestionsAvailable.status !== "success") {
                 return;
             }
 
             const suggestions = draft.suggestionsAvailable.suggestions;
             let index = suggestions.indexOf(draft.suggestionSelected as string) + direction;
-            if(index >= suggestions.length) {
+            if (index >= suggestions.length) {
                 index = suggestions.length - 1;
             }
 
@@ -264,25 +278,25 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
         },
         submitSuggestion: (draft, suggestion: string | undefined) => {
             const suggestionSelected = suggestion ?? draft.suggestionSelected;
-            if(!suggestionSelected || !draft.parseState) {
+            if (!suggestionSelected || !draft.parseState) {
                 return;
             }
 
             let editingValue = null;
             let suggestionPrefix = "";
-            for(const tag of [...draft.parseState.includeTags, ...draft.parseState.excludeTags]) {
-                if(tag.begin <= draft.textCursor && draft.textCursor <= tag.end) {
+            for (const tag of [ ...draft.parseState.includeTags, ...draft.parseState.excludeTags ]) {
+                if (tag.begin <= draft.textCursor && draft.textCursor <= tag.end) {
                     editingValue = tag;
                     break;
                 }
             }
 
-            if(!editingValue && draft.parseState.query) {
+            if (!editingValue && draft.parseState.query) {
                 const query = draft.parseState.query;
-                if(query.begin <= draft.textCursor && draft.textCursor <= query.end) {
+                if (query.begin <= draft.textCursor && draft.textCursor <= query.end) {
                     editingValue = query;
 
-                    if(editingValue.value.startsWith("!")) {
+                    if (editingValue.value.startsWith("!")) {
                         /* negative tag */
                         editingValue.value = editingValue.value.substring(1);
                         suggestionPrefix = "!tag:";
@@ -292,13 +306,13 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                 }
             }
 
-            if(!editingValue) {
+            if (!editingValue) {
                 console.warn("failed to add suggestion since we have no value which we edit.");
                 return;
             }
 
             let newText: string;
-            if(refSelection.current) {
+            if (refSelection.current) {
                 /* fixup selection */
                 refSelection.current.start = editingValue.begin + suggestionSelected.length + suggestionPrefix.length;
                 refSelection.current.end = refSelection.current.start;
@@ -311,19 +325,23 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
             dispatch("loadSuggestions", null);
         },
         submit: draft => {
-            if(draft.parseState?.status !== "success") {
+            if (draft.parseState?.status !== "success") {
                 return;
             }
 
-            if(draft.text) {
+            if (draft.text) {
                 navigate.push(`/feed/${props.blogName}/query/${draft.text}`);
             }
         }
     });
 
     useEffect(() => {
-        if(props.initialQuery) {
-            dispatch("setText", { text: props.initialQuery, cursor: props.initialQuery.length, showSuggestions: false });
+        if (props.initialQuery) {
+            dispatch("setText", {
+                text: props.initialQuery,
+                cursor: props.initialQuery.length,
+                showSuggestions: false
+            });
         }
 
         return () => {
@@ -354,7 +372,7 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                         showSuggestions: true
                     })}
                     onKeyPress={event => {
-                        switch(event.nativeEvent.key) {
+                        switch (event.nativeEvent.key) {
                             case "ArrowUp":
                                 event.preventDefault();
                                 dispatch("selectNextSuggestion", -1);
@@ -366,7 +384,7 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                                 break;
 
                             case "Tab":
-                                if(state.suggestionSelected) {
+                                if (state.suggestionSelected) {
                                     event.preventDefault();
                                 }
 
@@ -388,24 +406,48 @@ export const SearchBar = React.memo((props: { blog: BlogProvider, blogName: stri
                         selectSuggestion={suggestion => dispatch("submitSuggestion", suggestion)}
                     />
                 )}
-                <HintProvider hints={state.searchHints} />
+                <HintProvider hints={state.searchHints}/>
             </View>
         </View>
     );
 });
 
 const HintProvider = React.memo(({ hints }: { hints: SearchHint[] }) => {
-    const [hint] = hints;
+    const [ hint ] = hints;
     if (!hint) {
         return null;
     }
 
     return (
         <View style={styleHints.container}>
-            <Text style={[styleHints.text, hint.type === "warning" ? styleHints.textWarning : styleHints.textError]}>{hint.message}</Text>
+            <Text
+                style={[ styleHints.text, hint.type === "warning" ? styleHints.textWarning : styleHints.textError ]}>{hint.message}</Text>
         </View>
     );
 });
+
+const WebMouseEvents = <T extends Element = Element>(props: {
+    children: React.ReactElement,
+
+    onMouseDown?: MouseEventHandler<T> | undefined;
+    onMouseDownCapture?: MouseEventHandler<T> | undefined;
+    onMouseEnter?: MouseEventHandler<T> | undefined;
+    onMouseLeave?: MouseEventHandler<T> | undefined;
+    onMouseMove?: MouseEventHandler<T> | undefined;
+    onMouseMoveCapture?: MouseEventHandler<T> | undefined;
+    onMouseOut?: MouseEventHandler<T> | undefined;
+    onMouseOutCapture?: MouseEventHandler<T> | undefined;
+    onMouseOver?: MouseEventHandler<T> | undefined;
+    onMouseOverCapture?: MouseEventHandler<T> | undefined;
+    onMouseUp?: MouseEventHandler<T> | undefined;
+    onMouseUpCapture?: MouseEventHandler<T> | undefined;
+}) => {
+    if (Platform.OS === "web") {
+        return React.cloneElement(React.Children.only(props.children), props.children);
+    } else {
+        return props.children;
+    }
+};
 
 const SuggestionProvider = React.memo((props: {
     status: SuggestionResult | { status: "loading" | "unset" },
@@ -431,7 +473,7 @@ const SuggestionProvider = React.memo((props: {
             break;
 
         case "success":
-            if(!props.status.suggestions.length) {
+            if (!props.status.suggestions.length) {
                 return null;
             }
 
@@ -441,7 +483,7 @@ const SuggestionProvider = React.memo((props: {
                     key={suggestion}
                 >
                     <Text
-                        style={[styleSuggestions.suggestion, suggestion === props.selectedSuggestion && styleSuggestions.suggestionSelected]}
+                        style={[ styleSuggestions.suggestion, suggestion === props.selectedSuggestion && styleSuggestions.suggestionSelected ]}
                     >
                         {suggestion}
                     </Text>
@@ -456,12 +498,19 @@ const SuggestionProvider = React.memo((props: {
     }
 
     return (
-        <ScrollView
-            style={styleSuggestions.suggestionContainer}
-            keyboardShouldPersistTaps={"always"}
+        <WebMouseEvents
+            onMouseDown={event => {
+                console.error("MOUSE DOWN");
+                event.preventDefault();
+            }}
         >
-            {body}
-        </ScrollView>
+            <ScrollView
+                style={styleSuggestions.suggestionContainer}
+                keyboardShouldPersistTaps={"always"}
+            >
+                {body}
+            </ScrollView>
+        </WebMouseEvents>
     )
 });
 
@@ -506,7 +555,8 @@ const styleSuggestions = StyleSheet.create({
         zIndex: 10
     },
     suggestion: {
-        color: "black"
+        color: "black",
+        cursor: "pointer"
     },
     suggestionSelected: {
         color: "red",

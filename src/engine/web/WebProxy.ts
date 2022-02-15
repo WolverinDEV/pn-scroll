@@ -1,7 +1,6 @@
 import { AppSettings, Setting } from "../../Settings";
 import { Platform } from "react-native";
-import { Logger } from "loglevel";
-import { getLogger } from "../../Log";
+import { getLogger, Logger } from "../../Log";
 import { v4 as guuid } from "uuid";
 import { ImplHttpRequestParameters, ImplHttpResponse } from "../request";
 import { objectHeadersToKv } from "../blog-provider/Helper";

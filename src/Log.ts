@@ -133,12 +133,11 @@ class DefaultLogger implements Logger {
             [LogLevel.Error]: console.error,
         };
 
+        const [ format, ...formatArguments ] = msg;
         const timestamp = this.logTimestamp();
-        if(Platform.OS === "web") {
-            methodMap[level]("[%s][%s][%s][%s]: %s", scope, timestamp, LogLevel[level], this.name ?? "global", ...msg);
-        } else {
-            methodMap[level](`[${scope}][${timestamp}][${LogLevel[level]}][${this.name ?? "global"}]: `, ...msg);
-        }
+
+        let outputFormat = `[${scope}][${timestamp}][${LogLevel[level]}][${this.name ?? "global"}]: ${format}`;
+        methodMap[level](outputFormat, ...formatArguments);
     }
 
     private logTimestamp(): string {

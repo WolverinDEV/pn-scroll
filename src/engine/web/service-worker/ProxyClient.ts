@@ -1,6 +1,5 @@
 import {extractErrorMessage} from "../../../utils";
-import {Logger} from "loglevel";
-import {getLogger} from "../../../Log";
+import { getLogger, Logger } from "../../../Log";
 import {ImplHttpRequestParameters, ImplHttpResponse} from "../../request";
 import { BufferInputStream, BufferOutputStream } from "../../buffer/Buffer";
 
